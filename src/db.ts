@@ -1,0 +1,333 @@
+import { Espectaculo, FiltrosState, ConsultaLog } from './types';
+import { supabase } from './supabase';
+
+// Helper to get persistent session id
+export function getSessionId(): string {
+  let s = sessionStorage.getItem('tb_session');
+  if (!s) {
+    s = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    sessionStorage.setItem('tb_session', s);
+  }
+  return s;
+}
+
+// Fallback Mock Data
+export const MOCK_ESPECTACULOS: Espectaculo[] = [
+  { 
+    id: 'm1', 
+    nombre: 'Milonga del Indio',
+    descripcion: 'La milonga más tradicional de San Telmo en plaza histórica. Pista al aire libre e histórica de madera cuando llueve.',
+    tipo: 'baile', 
+    precio_tipo: 'economico', 
+    precio_valor: 500,
+    ambiente: 'techado', 
+    horario_tipo: 'nocturno',
+    hora_inicio: '22:00', 
+    hora_fin: '03:00',
+    direccion: 'Humberto Primo 462, San Telmo', 
+    barrio: 'San Telmo',
+    latitud: -34.6218, 
+    longitud: -58.3730,
+    imagen_url: 'https://images.unsplash.com/photo-1547153760-18fc86324498?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['viernes', 'sabado'], 
+    website: 'https://www.facebook.com/milongadelindiosantelmo', 
+    activo: true 
+  },
+  { 
+    id: 'm2', 
+    nombre: 'Tango en Plaza Dorrego',
+    descripcion: 'El show más icónico de Buenos Aires, bailado por profesionales en el corazón de la feria histórica. Todos los domingos.',
+    tipo: 'show_completo', 
+    precio_tipo: 'gratuito', 
+    precio_valor: 0,
+    ambiente: 'aire_libre', 
+    horario_tipo: 'vespertino',
+    hora_inicio: '17:00', 
+    hora_fin: '20:00',
+    direccion: 'Plaza Dorrego s/n, San Telmo', 
+    barrio: 'San Telmo',
+    latitud: -34.6231, 
+    longitud: -58.3695,
+    imagen_url: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['domingo'], 
+    website: 'https://turismo.buenosaires.gob.ar', 
+    activo: true 
+  },
+  { 
+    id: 'm3', 
+    nombre: 'Orquesta Típica Ciudad Baile',
+    descripcion: 'Concierto de tango de gran orquesta clásica con cantantes en vivo. Gran acústica y ambiente de época.',
+    tipo: 'cantado', 
+    precio_tipo: 'economico', 
+    precio_valor: 1200,
+    ambiente: 'techado', 
+    horario_tipo: 'nocturno',
+    hora_inicio: '21:00', 
+    hora_fin: '23:30',
+    direccion: 'Av. Corrientes 1234, Centro', 
+    barrio: 'Centro',
+    latitud: -34.6037, 
+    longitud: -58.3816,
+    imagen_url: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['jueves', 'sabado'], 
+    website: undefined, 
+    activo: true 
+  },
+  { 
+    id: 'm4', 
+    nombre: 'Café de los Angelitos',
+    descripcion: 'La experiencia de tango más lujosa e histórica. Cena show de tres pasos con orquesta en vivo, bailarines de nivel internacional y vestuarios espectaculares.',
+    tipo: 'show_completo', 
+    precio_tipo: 'premium', 
+    precio_valor: 18000,
+    ambiente: 'techado', 
+    horario_tipo: 'nocturno',
+    hora_inicio: '20:00', 
+    hora_fin: '23:00',
+    direccion: 'Av. Rivadavia 2100, Balvanera', 
+    barrio: 'Balvanera',
+    latitud: -34.6089, 
+    longitud: -58.3925,
+    imagen_url: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'],
+    website: 'https://www.cafedelosangelitos.com', 
+    activo: true 
+  },
+  { 
+    id: 'm5', 
+    nombre: 'Tango Callejero en Caminito',
+    descripcion: 'Espectáculo al aire libre gratuito en el pasaje más colorido de La Boca. Bailarines y cantantes se presentan de forma continua.',
+    tipo: 'baile', 
+    precio_tipo: 'gratuito', 
+    precio_valor: 0,
+    ambiente: 'aire_libre', 
+    horario_tipo: 'vespertino',
+    hora_inicio: '14:00', 
+    hora_fin: '19:00',
+    direccion: 'Caminito s/n, La Boca', 
+    barrio: 'La Boca',
+    latitud: -34.6345, 
+    longitud: -58.3631,
+    imagen_url: 'https://images.unsplash.com/photo-1551524164-687a55dd1126?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['sabado', 'domingo'], 
+    website: undefined, 
+    activo: true 
+  },
+  { 
+    id: 'm6', 
+    nombre: 'La Viruta Tango Club',
+    descripcion: 'Mítica escuela y milonga de trasnoche en Palermo Soho. Ideal para aprender los primeros pasos y bailar hasta el amanecer.',
+    tipo: 'baile', 
+    precio_tipo: 'economico', 
+    precio_valor: 1500,
+    ambiente: 'techado', 
+    horario_tipo: 'nocturno',
+    hora_inicio: '23:00', 
+    hora_fin: '05:00',
+    direccion: 'Armenia 1366, Palermo', 
+    barrio: 'Palermo',
+    latitud: -34.5869, 
+    longitud: -58.4291,
+    imagen_url: 'https://images.unsplash.com/photo-1504609813442-a8924e83f76e?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['miercoles', 'viernes', 'sabado', 'domingo'],
+    website: 'https://www.lavirutatango.com', 
+    activo: true 
+  },
+  { 
+    id: 'm7', 
+    nombre: 'Anfiteatro Parque Centenario',
+    descripcion: 'Ciclos de conciertos y espectáculos de tango gratuitos bajo las estrellas, organizados por el Gobierno de la Ciudad.',
+    tipo: 'show_completo', 
+    precio_tipo: 'gratuito', 
+    precio_valor: 0,
+    ambiente: 'aire_libre', 
+    horario_tipo: 'vespertino',
+    hora_inicio: '16:00', 
+    hora_fin: '19:00',
+    direccion: 'Av. Ángel Gallardo 490, Caballito', 
+    barrio: 'Caballito',
+    latitud: -34.6063, 
+    longitud: -58.4388,
+    imagen_url: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['domingo'], 
+    website: 'https://www.buenosaires.gob.ar/agendacultural', 
+    activo: true 
+  },
+  { 
+    id: 'm8', 
+    nombre: 'Centro Cultural Torquato Tasso',
+    descripcion: 'Famoso reducto de tango tradicional en San Telmo. Cuenta con shows íntimos de cantantes de culto y milongas tradicionales excelentes.',
+    tipo: 'baile', 
+    precio_tipo: 'economico', 
+    precio_valor: 800,
+    ambiente: 'techado', 
+    horario_tipo: 'nocturno',
+    hora_inicio: '20:00', 
+    hora_fin: '02:00',
+    direccion: 'Defensa 1575, San Telmo', 
+    barrio: 'San Telmo',
+    latitud: -34.6264, 
+    longitud: -58.3706,
+    imagen_url: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=600&q=80',
+    dias_semana: ['sabado'], 
+    website: 'https://www.torquatotasso.com.ar', 
+    activo: true 
+  }
+];
+
+// In-memory logs for offline fallback
+let localLogs: ConsultaLog[] = [];
+
+// Fetch shows applying standard filters
+export async function getEspectaculos(filtros: FiltrosState): Promise<Espectaculo[]> {
+  try {
+    let q = supabase.from('espectaculos').select('*').eq('activo', true);
+
+    if (filtros.tipo) q = q.eq('tipo', filtros.tipo);
+    if (filtros.precio) q = q.eq('precio_tipo', filtros.precio);
+    if (filtros.ambiente) q = q.eq('ambiente', filtros.ambiente);
+    if (filtros.horario) q = q.eq('horario_tipo', filtros.horario);
+    
+    // We fetch and filter days manually if standard contains has issues,
+    // or use Supabase filter
+    const { data, error } = await q;
+    if (error) throw error;
+
+    let res = (data || []) as Espectaculo[];
+    
+    // Day of week filtering
+    if (filtros.dias && filtros.dias.length > 0) {
+      res = res.filter(e => {
+        const dWeek = e.dias_semana || [];
+        return filtros.dias.some(day => dWeek.includes(day.toLowerCase()));
+      });
+    }
+
+    // If database is completely empty (no rows), return mock data
+    if (res.length === 0 && (!filtros.tipo && !filtros.precio && !filtros.ambiente && !filtros.horario && (!filtros.dias || filtros.dias.length === 0))) {
+      return MOCK_ESPECTACULOS;
+    }
+    
+    return res;
+  } catch (err) {
+    console.warn('Supabase no disponible, usando base de datos mock local:', err);
+    return getMockEspectaculos(filtros);
+  }
+}
+
+function getMockEspectaculos(filtros: FiltrosState): Espectaculo[] {
+  return MOCK_ESPECTACULOS.filter(e => {
+    if (filtros.tipo && e.tipo !== filtros.tipo) return false;
+    if (filtros.precio && e.precio_tipo !== filtros.precio) return false;
+    if (filtros.ambiente && e.ambiente !== filtros.ambiente) return false;
+    if (filtros.horario && e.horario_tipo !== filtros.horario) return false;
+    if (filtros.dias && filtros.dias.length > 0) {
+      const dWeek = e.dias_semana || [];
+      const matchesDay = filtros.dias.some(day => dWeek.includes(day.toLowerCase()));
+      if (!matchesDay) return false;
+    }
+    return true;
+  });
+}
+
+// Log searching queries for analytics/KNIME
+export async function registrarConsulta(log: Omit<ConsultaLog, 'fecha' | 'id'>): Promise<void> {
+  const finalLog = {
+    ...log,
+    fecha: new Date().toISOString()
+  };
+
+  try {
+    const { error } = await supabase.from('consultas_log').insert([finalLog]);
+    if (error) throw error;
+  } catch (err) {
+    console.warn('Fallo al guardar log en Supabase, guardando localmente:', err);
+    localLogs.push(finalLog);
+    if (localLogs.length > 200) localLogs.shift();
+  }
+}
+
+// Fetch logs for KNIME / Analytics
+export async function getLogsKNIME(limite = 50): Promise<ConsultaLog[]> {
+  try {
+    const { data, error } = await supabase
+      .from('consultas_log')
+      .select('*')
+      .order('fecha', { ascending: false })
+      .limit(limite);
+    if (error) throw error;
+    return (data || []) as ConsultaLog[];
+  } catch (err) {
+    console.warn('Fallo al obtener logs de Supabase, retornando locales:', err);
+    return [...localLogs].reverse().slice(0, limite);
+  }
+}
+
+// Get total logs count for today
+export async function getTotalConsultasHoy(): Promise<number> {
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
+    const { count, error } = await supabase
+      .from('consultas_log')
+      .select('*', { count: 'exact', head: true })
+      .gte('fecha', `${hoy}T00:00:00`)
+      .lte('fecha', `${hoy}T23:59:59`);
+    if (error) throw error;
+    return count || 0;
+  } catch (err) {
+    const hoyStr = new Date().toDateString();
+    return localLogs.filter(l => l.fecha && new Date(l.fecha).toDateString() === hoyStr).length;
+  }
+}
+
+// Standard administration functions for espectáculos (creating, editing, deleting)
+export async function adminAgregarEspectaculo(show: Omit<Espectaculo, 'id'>): Promise<Espectaculo> {
+  try {
+    const { data, error } = await supabase
+      .from('espectaculos')
+      .insert([show])
+      .select();
+    if (error) throw error;
+    return data[0] as Espectaculo;
+  } catch (err) {
+    console.warn('Modo local: agregando a mock en memoria');
+    const newShow = {
+      ...show,
+      id: 'm_' + Date.now()
+    };
+    MOCK_ESPECTACULOS.push(newShow);
+    return newShow;
+  }
+}
+
+export async function adminActualizarEspectaculo(id: string, show: Partial<Espectaculo>): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('espectaculos')
+      .update(show)
+      .eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.warn('Modo local: actualizando en mock');
+    const idx = MOCK_ESPECTACULOS.findIndex(e => e.id === id);
+    if (idx !== -1) {
+      MOCK_ESPECTACULOS[idx] = { ...MOCK_ESPECTACULOS[idx], ...show };
+    }
+  }
+}
+
+export async function adminEliminarEspectaculo(id: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('espectaculos')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.warn('Modo local: eliminando de mock');
+    const idx = MOCK_ESPECTACULOS.findIndex(e => e.id === id);
+    if (idx !== -1) {
+      MOCK_ESPECTACULOS.splice(idx, 1);
+    }
+  }
+}
