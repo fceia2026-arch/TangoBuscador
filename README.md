@@ -15,7 +15,7 @@ Combina tres tecnologías clave para ofrecer una experiencia única e inteligent
 🗺️ Geolocalización          →  Mapa interactivo 
 ```
 
----
+
 
 ### ¿Para quién esta destinado?
 
