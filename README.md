@@ -219,38 +219,8 @@ Cuando el mapa se levanta en la interfaz, se asocia al elemento del DOM identifi
 
 ### 5.2. Georreferenciación y Marcadores Personalizados de Usuario
 El mapa detecta la posición real del usuario haciendo uso de las capacidades nativas del navegador mediante `navigator.geolocation.getCurrentPosition`. 
+Para evitar comportamientos inesperados de posicionamiento en dispositivos de pruebas o servidores remotos que retornen coordenadas nulas o corrompidas, el código sanitiza exhaustivamente las variables geográficas antes de mapear la posición.
 
-Para evitar comportamientos inesperados de posicionamiento en dispositivos de pruebas o servidores remotos que retornen coordenadas nulas o corrompidas, el código sanitiza exhaustivamente las variables geográficas antes de mapear la posición:
-
-```typescript
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(position => {
-    if (position && position.coords) {
-      const { latitude, longitude } = position.coords;
-      if (latitude !== null && latitude !== undefined && longitude !== null && longitude !== undefined) {
-        const latVal = Number(latitude);
-        const lngVal = Number(longitude);
-        
-        if (!isNaN(latVal) && !isNaN(lngVal)) {
-          const pulseIcon = L.divIcon({
-            html: `<span class="relative flex h-4 w-4">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600 border border-white"></span>
-            </span>`,
-            className: 'custom-user-marker',
-            iconSize: [16, 16],
-            iconAnchor: [8, 8]
-          });
-          
-          userLocationMarkerRef.current = L.marker([latVal, lngVal], { icon: pulseIcon })
-            .addTo(mapInstance)
-            .bindPopup('<b>📍 Tu ubicación actual</b>');
-        }
-      }
-    }
-  });
-}
-```
 
 ### 5.3. Encuadre Automático de Espectáculos (FlyToBounds)
 Al actualizar el catálogo según los filtros activos, la interfaz geográfica no permanece estática. Se calcula en tiempo real un marco geográfico (`bounding box`) conteniendo todos los espectáculos que cumplen con el criterio seleccionado, ajustando el nivel de zoom y el centro del mapa mediante un deslizamiento fluido (`flyToBounds`):
