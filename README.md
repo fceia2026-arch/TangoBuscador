@@ -13,10 +13,10 @@ Combina tres tecnologías clave para ofrecer una experiencia única e inteligent
 🤖 Inteligencia Artificial  →  Búsqueda en lenguaje natural
 🌤️ Clima en tiempo real     →  Recomendaciones según el tiempo
 🗺️ Geolocalización          →  Mapa interactivo 
+
+
+
 ```
-
-
-
 ### ¿Para quién esta destinado?
 
 | Perfil | Beneficio |
