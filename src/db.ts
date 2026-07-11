@@ -1,30 +1,46 @@
 import { Espectaculo, FiltrosState, ConsultaLog, TipoPrecio } from './types';
 import { supabase } from './supabase';
 
-// Helper to deterministically assign random price between 5.000 and 30.000
+// Helper to deterministically assign random price: some free, others between 15.000 and 35.000
 export function getDeterministicPrice(id: string): { valor: number; tipo: TipoPrecio } {
   let hash = 0;
   const str = id || '';
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const min = 5000;
-  const max = 30000;
+  
+  // Deterministically decide if it's free (e.g. ~25% of the time based on hash)
+  const isFree = (Math.abs(hash) % 4) === 0;
+  
+  if (isFree) {
+    return { valor: 0, tipo: 'gratuito' };
+  }
+  
+  const min = 15000;
+  const max = 35000;
   const range = max - min;
   const rawVal = Math.abs(hash) % (range + 1);
   // Round to nearest 500 for clean currency display
   const rounded = Math.round((min + rawVal) / 500) * 500;
   const precio_valor = Math.min(max, Math.max(min, rounded));
-  // Divide into economic vs premium based on threshold
-  const precio_tipo: TipoPrecio = precio_valor <= 17500 ? 'economico' : 'premium';
+  
+  // Divide into economic vs premium based on $25,000 threshold
+  const precio_tipo: TipoPrecio = precio_valor <= 25000 ? 'economico' : 'premium';
   return { valor: precio_valor, tipo: precio_tipo };
 }
 
-// Helper to apply random/deterministic prices and make exactly two shows free
+// Helper to apply random/deterministic prices and make some shows free
 export function applyDeterministicPrices(list: Espectaculo[]): Espectaculo[] {
   let mapped = list.map(e => {
-    // Force m2 (Tango en Plaza Dorrego) and m5 (Tango Callejero en Caminito) to be free
-    if (e.id === 'm2' || e.id === 'm5') {
+    // Force specific ones to be free if wanted, or let getDeterministicPrice handle it
+    if (
+      e.id === 'm2' || 
+      e.id === 'm5' || 
+      e.id === 'm12' || 
+      e.nombre.toLowerCase().includes('gratuito') || 
+      e.nombre.toLowerCase().includes('glorieta') || 
+      e.nombre.toLowerCase().includes('anfiteatro')
+    ) {
       return {
         ...e,
         precio_valor: 0,
@@ -39,13 +55,12 @@ export function applyDeterministicPrices(list: Espectaculo[]): Espectaculo[] {
     };
   });
 
-  // If we have fewer than 2 free shows, force exactly two to be free
+  // Ensure there are at least 3 free shows
   const freeCount = mapped.filter(e => e.precio_tipo === 'gratuito').length;
-  if (freeCount < 2 && mapped.length >= 2) {
-    const indicesToMakeFree = [1, 4].filter(idx => idx < mapped.length);
-    const finalIndices = indicesToMakeFree.length >= 2 ? indicesToMakeFree : [0, 1].slice(0, mapped.length);
+  if (freeCount < 3 && mapped.length >= 3) {
+    const indicesToMakeFree = [1, 4, 11].filter(idx => idx < mapped.length);
     mapped = mapped.map((e, index) => {
-      if (finalIndices.includes(index)) {
+      if (indicesToMakeFree.includes(index)) {
         return {
           ...e,
           precio_valor: 0,
