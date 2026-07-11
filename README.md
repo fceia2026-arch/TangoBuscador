@@ -461,7 +461,7 @@ Sistema completo para gestionar el contenido de la app:
 - Acceso desde cualquier dispositivo o navegador
 
 ---
-##  __Readme desarrollado con IA y adaptado segun criterio personal__
+####  __Readme desarrollado con IA y adaptado segun criterio personal__
 
 
 
