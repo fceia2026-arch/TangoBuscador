@@ -223,36 +223,8 @@ Para evitar comportamientos inesperados de posicionamiento en dispositivos de pr
 
 
 ### 5.3. Encuadre Automático de Espectáculos (FlyToBounds)
-Al actualizar el catálogo según los filtros activos, la interfaz geográfica no permanece estática. Se calcula en tiempo real un marco geográfico (`bounding box`) conteniendo todos los espectáculos que cumplen con el criterio seleccionado, ajustando el nivel de zoom y el centro del mapa mediante un deslizamiento fluido (`flyToBounds`):
+Al actualizar el catálogo según los filtros activos, la interfaz geográfica no permanece estática. Se calcula en tiempo real un marco geográfico (`bounding box`) conteniendo todos los espectáculos que cumplen con el criterio seleccionado, ajustando el nivel de zoom y el centro del mapa mediante un deslizamiento fluido (`flyToBounds`).
 
-```typescript
-const points: [number, number][] = [];
-
-espectaculos.forEach(show => {
-  if (show.latitud === null || show.latitud === undefined || show.longitud === null || show.longitud === undefined) return;
-  
-  // Limpieza robusta de entradas numéricas que posean formato incorrecto de comas
-  const cleanLat = String(show.latitud).replace(',', '.').trim();
-  const cleanLng = String(show.longitud).replace(',', '.').trim();
-  
-  if (cleanLat === '' || cleanLng === '' || cleanLat === 'null' || cleanLng === 'null') return;
-  
-  const latVal = Number(cleanLat);
-  const lngVal = Number(cleanLng);
-  
-  if (isNaN(latVal) || isNaN(lngVal)) return;
-  
-  points.push([latVal, lngVal]);
-});
-
-if (points.length > 0 && mapContainerRef.current) {
-  mapContainerRef.current.flyToBounds(points, {
-    padding: [50, 50],
-    maxZoom: 15,
-    duration: 1.2
-  });
-}
-```
 
 ### 5.4. El Desafío del Minimapa en Modales
 Cuando un usuario selecciona un espectáculo de la cartelera, se abre un diálogo modal detallado con la información expandida. Para brindar un contexto geográfico inmediato, el modal incluye su propio mini-mapa interactivo independiente de ID `'minimapa-modal'`.
@@ -261,65 +233,7 @@ Este escenario plantea dos retos principales para la estabilidad del navegador:
 1. El modal puede montarse antes de que su contenedor HTML esté disponible en el DOM, ocasionando fallos de inicialización.
 2. Al cerrar el modal, las referencias del mapa anterior quedan retenidas en memoria activa, gatillando errores si se intenta volver a abrir otro detalle.
 
-Para superar este comportamiento problemático, se estructuró un flujo asincrónico coordinado y protegido en un efecto secundario de ciclo de vida (`useEffect`), garantizando que se limpie la memoria existente y que los valores lat/long sean estrictamente analizados antes de intentar montar el minimapa:
-
-```typescript
-useEffect(() => {
-  let timeoutId: any = null;
-
-  // 1. Desmontar preventivamente mapas existentes en el modal
-  if (miniMapContainerRef.current) {
-    try {
-      miniMapContainerRef.current.remove();
-    } catch (e) {
-      console.warn('Error al desmontar minimapa modal previo:', e);
-    }
-    miniMapContainerRef.current = null;
-  }
-
-  // 2. Comprobar que el espectáculo posea coordenadas legibles
-  if (selectedShow && (window as any).L) {
-    // Demorar levemente la ejecución para esperar el renderizado del nodo en el DOM
-    timeoutId = setTimeout(() => {
-      const L = (window as any).L;
-      const minimapDiv = document.getElementById('minimapa-modal');
-      
-      if (minimapDiv && !miniMapContainerRef.current) {
-        const cleanLat = String(selectedShow.latitud || '').replace(',', '.').trim();
-        const cleanLng = String(selectedShow.longitud || '').replace(',', '.').trim();
-        const latVal = Number(cleanLat);
-        const lngVal = Number(cleanLng);
-        
-        if (!selectedShow.latitud || !selectedShow.longitud || isNaN(latVal) || isNaN(lngVal)) {
-          return;
-        }
-
-        const miniMap = L.map('minimapa-modal', {
-          center: [latVal, lngVal],
-          zoom: 15,
-          zoomControl: false,
-          attributionControl: false
-        });
-
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          maxZoom: 18
-        }).addTo(miniMap);
-
-        // Diseñar un marcador simple rojo para fijar la ubicación del show
-        L.marker([latVal, lngVal]).addTo(miniMap);
-        miniMapContainerRef.current = miniMap;
-      }
-    }, 150);
-  }
-
-  // Limpieza del timer al desmontar el componente
-  return () => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  };
-}, [selectedShow]);
-```
+Para superar este comportamiento problemático, se estructuró un flujo asincrónico coordinado y protegido en un efecto secundario de ciclo de vida (`useEffect`), garantizando que se limpie la memoria existente y que los valores lat/long sean estrictamente analizados antes de intentar montar el minimapa.
 
 ---
 
