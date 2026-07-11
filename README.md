@@ -1,7 +1,8 @@
 # 🎵 Tango — Buscador de Espectáculos en Buenos Aires
 
 
-Bienvenido a la aplicación web gratuita que permite buscar y descubrir espectáculos de tango en la Ciudad de Buenos Aires.  **Encontrá el show de tango perfecto en Buenos Aires.**
+#### Bienvenido a la aplicación web gratuita que permite buscar y descubrir espectáculos de tango en la Ciudad de Buenos Aires. 
+Encontrá el show de tango perfecto en Buenos Aires.
 Filtrá por tipo, precio, horario y clima en tiempo real.
 Desarrollado 100% con asistencia de Inteligencia Artificial.  Claude Sonnet 4.6 y Gemini 3.5 Flash.
 
