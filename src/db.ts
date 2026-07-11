@@ -411,29 +411,33 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
 // In-memory logs for offline fallback
 let localLogs: ConsultaLog[] = [];
 
-// Flag to track if we've already ran the one-time Supabase price seed
+// Flag to track if we've already restored original prices in Supabase
 let pricesUpdatedInSupabase = false;
 
-// Seed Supabase with random prices between $15,000 and $35,000 once
-export async function seedDatabasePricesOnce(): Promise<void> {
+// Restore original high-quality prices from MOCK_ESPECTACULOS to Supabase once
+export async function restoreOriginalPricesToSupabase(): Promise<void> {
   try {
-    const { data: shows, error } = await supabase.from('espectaculos').select('id, nombre, precio_valor, precio_tipo');
+    const { data: dbShows, error } = await supabase.from('espectaculos').select('id, nombre, precio_valor, precio_tipo');
     if (error) throw error;
-    
-    if (shows) {
-      console.log('Seeding Supabase database with random prices between $15,000 and $35,000...');
-      for (const show of shows) {
-        const { valor, tipo } = getDeterministicPrice(show.id);
-        
-        // Update this show in Supabase
-        await supabase.from('espectaculos')
-          .update({ precio_valor: valor, precio_tipo: tipo })
-          .eq('id', show.id);
+
+    if (dbShows && dbShows.length > 0) {
+      console.log('Restoring original mock prices to Supabase database...');
+      for (const dbShow of dbShows) {
+        const mockShow = MOCK_ESPECTACULOS.find(m => m.nombre.toLowerCase().trim() === dbShow.nombre.toLowerCase().trim());
+        if (mockShow) {
+          // Update the show's price in Supabase to match the correct original mock price
+          await supabase.from('espectaculos')
+            .update({ 
+              precio_valor: mockShow.precio_valor, 
+              precio_tipo: mockShow.precio_tipo 
+            })
+            .eq('id', dbShow.id);
+        }
       }
-      console.log('Successfully updated all Supabase shows with new randomized prices!');
+      console.log('Successfully restored original mock prices to Supabase!');
     }
   } catch (err) {
-    console.warn('Error trying to update prices in Supabase:', err);
+    console.warn('Error trying to restore original prices in Supabase:', err);
   }
 }
 
@@ -456,21 +460,32 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
     // If database is completely empty (no rows), return mock data
     if (res.length === 0 && (!filtros.tipo && !filtros.ambiente && !filtros.horario && (!filtros.dias || filtros.dias.length === 0))) {
       res = [...MOCK_ESPECTACULOS];
-      res = applyDeterministicPrices(res);
     } else if (res.length > 0) {
-      // If we have database records and they still have the old default seeds (500 or 1200):
-      const hasOldSeeds = res.some(e => 
-        (e.nombre === 'Milonga del Indio' && e.precio_valor === 500) || 
-        (e.nombre === 'Orquesta Típica Ciudad Baile' && e.precio_valor === 1200)
+      // If we have database records and they still have incorrect/buggy deterministic values,
+      // or if we need to restore them once:
+      const hasBuggyPrices = res.some(e => 
+        (e.nombre === 'Orquesta Típica Ciudad Baile' && e.precio_valor === 18500) || 
+        (e.nombre === 'La Catedral Club' && e.precio_valor === 21500) ||
+        (e.nombre === 'Rojo Tango (Hotel Faena)' && e.precio_valor === 0)
       );
-      if (hasOldSeeds && !pricesUpdatedInSupabase) {
+      if (hasBuggyPrices && !pricesUpdatedInSupabase) {
         pricesUpdatedInSupabase = true;
-        // Asynchronously update all rows in Supabase in background
-        seedDatabasePricesOnce().then(() => {});
+        // Asynchronously restore the original prices to Supabase database in background
+        restoreOriginalPricesToSupabase().then(() => {});
         
-        // At runtime, for this very first load, we temporarily apply deterministic prices
-        // to `res` so they see them immediately without waiting for DB roundtrips!
-        res = applyDeterministicPrices(res);
+        // At runtime, for this very first load, we temporarily map correct original prices
+        // from MOCK_ESPECTACULOS by name to res so they see them immediately without waiting for DB roundtrips!
+        res = res.map(dbShow => {
+          const mockShow = MOCK_ESPECTACULOS.find(m => m.nombre.toLowerCase().trim() === dbShow.nombre.toLowerCase().trim());
+          if (mockShow) {
+            return {
+              ...dbShow,
+              precio_valor: mockShow.precio_valor,
+              precio_tipo: mockShow.precio_tipo
+            };
+          }
+          return dbShow;
+        });
       }
     }
 
@@ -495,7 +510,7 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
 }
 
 function getMockEspectaculos(filtros: FiltrosState): Espectaculo[] {
-  const mappedMocks = applyDeterministicPrices(MOCK_ESPECTACULOS);
+  const mappedMocks = [...MOCK_ESPECTACULOS];
 
   return mappedMocks.filter(e => {
     if (filtros.tipo && e.tipo !== filtros.tipo) return false;
