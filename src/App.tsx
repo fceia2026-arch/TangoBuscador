@@ -57,6 +57,8 @@ export default function App() {
   const [aiQuery, setAiQuery] = useState<string>('');
   const [aiLoading, setAiLoading] = useState<boolean>(false);
   const [aiResponseText, setAiResponseText] = useState<string | null>(null);
+  const [isOfflineSearch, setIsOfflineSearch] = useState<boolean>(false);
+  const [dismissedOfflineWarning, setDismissedOfflineWarning] = useState<boolean>(false);
 
   // Manual Filter states
   const [filters, setFilters] = useState<FiltrosState>({
@@ -414,6 +416,7 @@ export default function App() {
       setFilters(newFilters);
       setTempFilters(newFilters);
       setAiResponseText(filtersResult.explicacion);
+      setIsOfflineSearch(!!filtersResult.isOffline);
       triggerToast('Búsqueda interpretada por IA aplicada', 'success');
 
       // Trigger search
@@ -455,6 +458,8 @@ export default function App() {
     setTempCalSelectedDates([]);
     setAiQuery('');
     setAiResponseText(null);
+    setIsOfflineSearch(false);
+    setDismissedOfflineWarning(false);
     triggerToast('Filtros restablecidos', 'success');
   };
 
@@ -1427,20 +1432,115 @@ export default function App() {
           </div>
 
           {/* TEXTO DE BIENVENIDA (A LA DERECHA) */}
-          <div className="flex-1 px-4 py-3 md:py-2 flex flex-col justify-center min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span id="badge-bienvenida" className="text-xs sm:text-sm md:text-base font-serif font-bold bg-blue-50 text-blue-900 px-3 py-0.5 rounded border border-blue-100">
-                Bienvenidos al Compás de Buenos Aires
+          <div className="flex-1 pl-4 md:pl-6 pr-4 py-3 md:py-2 flex flex-col justify-center items-start min-w-0 space-y-2">
+            <div className="flex items-center justify-start gap-2 flex-wrap">
+              <span id="badge-bienvenida" className="text-sm sm:text-base font-serif font-bold bg-blue-50 text-blue-900 px-3 py-1 rounded border border-blue-100 shadow-xs uppercase">
+                BIENVENIDOS AL COMPÁS DE BUENOS AIRES
               </span>
             </div>
-            <p id="descripcion-bienvenida" className="text-[11px] sm:text-xs md:text-[13px] text-blue-700 leading-snug">
-              Explorá la cartelera de tango adaptada al clima de la ciudad.
-              <span className="hidden sm:inline"><br /></span>
-              <span className="inline sm:hidden"> </span>
-              Configurá los filtros manuales o utilizá el Buscador inteligente.
-            </p>
+            <div id="descripcion-bienvenida" className="space-y-2 text-left">
+              <p className="text-[11px] sm:text-xs md:text-[13px] text-blue-700 leading-snug font-serif pl-[13px]">
+                Explorá la cartelera de tango adaptada al clima de la ciudad.
+              </p>
+            </div>
           </div>
         </section>
+
+        {/* AI SEARCH PANEL */}
+        <section className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col gap-4 animate-fade-in">
+          <div className="w-full text-center">
+            <p className="text-sm text-blue-800 font-extrabold uppercase tracking-wider">
+              CONFIGURÁ LOS FILTROS CON LA BÚSQUEDA MANUAL O CON EL BUSCADOR INTELIGENTE.
+            </p>
+          </div>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6 w-full">
+            <div className="flex-1 space-y-1">
+              <h2 className="text-sm font-semibold text-blue-900 flex items-center gap-2 uppercase tracking-wider border-b border-blue-200 pb-2 mb-2 w-full">
+                <i className="fa fa-sliders-h text-blue-600"></i>
+                FILTROS MEDIANTE BUSCADOR CON IA
+              </h2>
+              <div className="text-[10.5px] font-bold text-blue-600 uppercase tracking-wider">
+                GEMINI INTERPRETA Y CONFIGURA LOS FILTROS AUTOMÁTICAMENTE
+              </div>
+              <p className="text-xs sm:text-[12.5px] text-blue-700 leading-snug max-w-2xl">
+                Solicitudes como <i>"milongas gratis este domingo"</i>, <i>"shows al aire libre"</i> o <i>"algo cantado"</i>.
+              </p>
+            </div>
+
+            <form onSubmit={handleAISearch} className="w-full md:w-auto flex-1 max-w-xl">
+              <div className="flex bg-white border border-blue-200 rounded-2xl p-0.5 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <input
+                  type="text"
+                  placeholder="Escribe tu búsqueda aquí..."
+                  value={aiQuery}
+                  onChange={e => setAiQuery(e.target.value)}
+                  className="flex-1 px-3 py-1.5 text-xs md:text-sm text-slate-800 outline-none placeholder:text-slate-400 bg-transparent"
+                />
+                <button
+                  type="submit"
+                  disabled={aiLoading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-[10px] md:text-xs px-3 md:px-4 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  {aiLoading ? (
+                    <>
+                      <i className="fa fa-spinner animate-spin"></i> Interpretando...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa fa-sparkles"></i> Buscar con IA
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        {/* OFFLINE SEARCH MODE NOTICE */}
+        {isOfflineSearch && !dismissedOfflineWarning && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start justify-between gap-3 animation-fade-in">
+            <div className="flex gap-2.5">
+              <span className="text-sm mt-0.5">⚠️</span>
+              <div>
+                <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">Modo Offline Activo (Búsqueda Heurística Local)</div>
+                <div className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                  Se aplicó una búsqueda heurística local porque la variable <strong>GEMINI_API_KEY</strong> no está configurada.
+                  Para habilitar la Inteligencia Artificial completa de Gemini, por favor añádela en la sección <strong>Settings &gt; Secrets</strong> de AI Studio, o en las variables de entorno de tu servidor.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setDismissedOfflineWarning(true)}
+              className="text-amber-500 hover:text-amber-800 p-1 rounded-lg hover:bg-amber-100 transition-colors text-xs self-start cursor-pointer flex items-center justify-center w-5 h-5"
+              title="Ocultar advertencia"
+              type="button"
+            >
+              <i className="fa fa-times"></i>
+            </button>
+          </div>
+        )}
+
+        {/* ACTIVE IA INTERPRETATION SUMMARY */}
+        {aiResponseText && (
+          <div className="bg-sky-100 border border-sky-300 rounded-xl p-4 flex items-start justify-between gap-3 shadow-sm animation-fade-in text-blue-900">
+            <div className="flex gap-3">
+              <span className="text-lg">💡</span>
+              <div>
+                <div className="text-xs font-bold text-blue-900 uppercase tracking-wider">Interpretación del Buscador Inteligente:</div>
+                <div className="text-xs text-blue-700 mt-1 font-medium leading-relaxed">{aiResponseText}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setAiResponseText(null)}
+              className="text-sky-700 hover:text-sky-900 px-3 py-1 rounded-lg hover:bg-sky-200/60 transition-colors text-xs font-bold self-start cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 border border-sky-200 bg-white/50"
+              title="Ocultar interpretación"
+              type="button"
+            >
+              <span>Cerrar</span>
+              <i className="fa fa-times text-base"></i>
+            </button>
+          </div>
+        )}
 
         {/* ADMIN DASHBOARD - ONLY VISIBLE TO LOGGED IN USERS */}
         {adminLoggedIn && (
@@ -2200,108 +2300,14 @@ Content-Type: application/json`}
       </>
     )}
 
-        {/* AI SEARCH PANEL */}
-        <section className="md:h-[2.2cm] md:min-h-[2.2cm] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-4 md:py-2 md:px-6 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
-          <div className="flex-1 space-y-1">
-            <h2 className="text-sm md:text-base font-serif font-bold text-blue-900 flex items-center gap-2">
-              <span className="p-1 bg-blue-100 text-blue-700 rounded-lg inline-flex items-center justify-center shadow-xs shrink-0">
-                <svg 
-                  className="w-4.5 h-4.5 text-blue-700" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="1.5" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round"
-                >
-                  {/* Left wooden handle/body */}
-                  <rect x="2" y="5" width="4" height="14" rx="1" fill="currentColor" fillOpacity="0.2" />
-                  {/* Left Panel Keys */}
-                  <circle cx="3.5" cy="8" r="0.6" fill="currentColor" />
-                  <circle cx="4.5" cy="10" r="0.6" fill="currentColor" />
-                  <circle cx="3.5" cy="12" r="0.6" fill="currentColor" />
-                  <circle cx="4.5" cy="14" r="0.6" fill="currentColor" />
-                  <circle cx="3.5" cy="16" r="0.6" fill="currentColor" />
 
-                  {/* Bellows (fuelle) zigzags */}
-                  <path 
-                    d="M6 5 L8 4 L10 5 L12 4 L14 5 L16 4 L18 5 M6 19 L8 20 L10 19 L12 20 L14 19 L16 20 L18 19" 
-                    stroke="currentColor" 
-                    strokeWidth="1.5" 
-                  />
-                  {/* Inner vertical folds of the bellows */}
-                  <line x1="8" y1="4" x2="8" y2="20" stroke="currentColor" strokeWidth="1.5" />
-                  <line x1="10" y1="5" x2="10" y2="19" stroke="currentColor" strokeWidth="1" opacity="0.7" />
-                  <line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5" />
-                  <line x1="14" y1="5" x2="14" y2="19" stroke="currentColor" strokeWidth="1" opacity="0.7" />
-                  <line x1="16" y1="4" x2="16" y2="20" stroke="currentColor" strokeWidth="1.5" />
-
-                  {/* Right wooden handle/body */}
-                  <rect x="18" y="5" width="4" height="14" rx="1" fill="currentColor" fillOpacity="0.2" />
-                  {/* Right Panel Keys */}
-                  <circle cx="20.5" cy="8" r="0.6" fill="currentColor" />
-                  <circle cx="19.5" cy="10" r="0.6" fill="currentColor" />
-                  <circle cx="20.5" cy="12" r="0.6" fill="currentColor" />
-                  <circle cx="19.5" cy="14" r="0.6" fill="currentColor" />
-                  <circle cx="20.5" cy="16" r="0.6" fill="currentColor" />
-
-                  {/* Straps/Handles */}
-                  <path d="M2 9 C 0.5 10, 0.5 14, 2 15" stroke="currentColor" strokeWidth="1" fill="none" />
-                  <path d="M22 9 C 23.5 10, 23.5 14, 22 15" stroke="currentColor" strokeWidth="1" fill="none" />
-                </svg>
-              </span>
-              Buscador de Tango con Inteligencia Artificial
-            </h2>
-            <p className="text-xs sm:text-[12.5px] text-blue-700 leading-snug max-w-2xl">
-              <span className="font-extrabold text-blue-900 block sm:inline mr-1">Solo puedes pedir</span> cosas como <i>"milongas gratis este domingo"</i>, <i>"shows premium al aire libre"</i> o <i>"algo cantado para hoy a la noche"</i>. Gemini configurará los filtros automáticamente.
-            </p>
-          </div>
-
-          <form onSubmit={handleAISearch} className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="flex bg-white border border-blue-200 rounded-2xl p-0.5 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-              <input
-                type="text"
-                placeholder="Escribe tu búsqueda aquí..."
-                value={aiQuery}
-                onChange={e => setAiQuery(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs md:text-sm text-slate-800 outline-none placeholder:text-slate-400 bg-transparent"
-              />
-              <button
-                type="submit"
-                disabled={aiLoading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-[10px] md:text-xs px-3 md:px-4 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                {aiLoading ? (
-                  <>
-                    <i className="fa fa-spinner animate-spin"></i> Interpretando...
-                  </>
-                ) : (
-                  <>
-                    <i className="fa fa-sparkles"></i> Buscar con IA
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* ACTIVE IA INTERPRETATION SUMMARY */}
-        {aiResponseText && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 animation-fade-in">
-            <span className="text-lg">💡</span>
-            <div>
-              <div className="text-xs font-bold text-amber-900 uppercase tracking-wider">Interpretación de la Inteligencia Artificial:</div>
-              <div className="text-xs text-amber-800 mt-1 leading-relaxed">{aiResponseText}</div>
-            </div>
-          </div>
-        )}
 
         {/* MANUAL FILTERS COLUMN CONTAINER */}
         <section className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-5 md:p-6">
           <div className="flex items-center justify-between border-b border-blue-200 pb-4 mb-5">
             <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-2">
               <i className="fa fa-sliders-h text-blue-600"></i>
-              Filtros de Búsqueda Manuales
+              Filtros de Búsqueda Manual
             </h3>
             
             <button

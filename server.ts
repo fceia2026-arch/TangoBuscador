@@ -114,9 +114,9 @@ app.post('/api/gemini/search', async (req, res) => {
       dias.length > 0 ? `Días: ${dias.join(', ')}` : ''
     ].filter(Boolean).join(' | ');
 
-    const explicacion = `⚠️ [Modo Offline Activo] Se aplicó una búsqueda heurística local porque la variable GEMINI_API_KEY no está configurada. Para habilitar la IA completa de Gemini, por favor añádela en la sección Settings > Secrets de AI Studio, o en las variables de entorno de Vercel. Filtros aplicados localmente: ${detectedFiltrosDesc || 'Todos los espectáculos'}`;
+    const explicacion = `Búsqueda inteligente local (Modo Offline): ${detectedFiltrosDesc || 'Todos los espectáculos'}`;
 
-    res.json({ tipo, precio, ambiente, horario, dias, explicacion });
+    res.json({ tipo, precio, ambiente, horario, dias, explicacion, isOffline: true });
     return;
   }
 

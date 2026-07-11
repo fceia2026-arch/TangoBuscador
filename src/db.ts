@@ -91,8 +91,8 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
     nombre: 'Milonga del Indio',
     descripcion: 'La milonga más tradicional de San Telmo en plaza histórica. Pista al aire libre e histórica de madera cuando llueve.',
     tipo: 'baile', 
-    precio_tipo: 'economico', 
-    precio_valor: 15000,
+    precio_tipo: 'gratuito', 
+    precio_valor: 0,
     ambiente: 'techado', 
     horario_tipo: 'nocturno',
     hora_inicio: '22:00', 
@@ -131,8 +131,8 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
     nombre: 'Orquesta Típica Ciudad Baile',
     descripcion: 'Concierto de tango de gran orquesta clásica con cantantes en vivo. Gran acústica y ambiente de época.',
     tipo: 'cantado', 
-    precio_tipo: 'economico', 
-    precio_valor: 12000,
+    precio_tipo: 'gratuito', 
+    precio_valor: 0,
     ambiente: 'techado', 
     horario_tipo: 'nocturno',
     hora_inicio: '21:00', 
@@ -232,7 +232,7 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
     descripcion: 'Famoso reducto de tango tradicional en San Telmo. Cuenta con shows íntimos de cantantes de culto y milongas tradicionales excelentes.',
     tipo: 'baile', 
     precio_tipo: 'economico', 
-    precio_valor: 16800,
+    precio_valor: 20000,
     ambiente: 'techado', 
     horario_tipo: 'nocturno',
     hora_inicio: '20:00', 
@@ -249,7 +249,7 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
   { 
     id: 'm9', 
     nombre: 'Rojo Tango (Hotel Faena)',
-    descripcion: 'Espectáculo ultra-premium y cabaret íntimo de vanguardia. Experiencia multisensorial exclusiva con excelente gastronomía y orquesta de primer nivel en Puerto Madero.',
+    descripcion: 'Espectáculo ultra-premium and cabaret íntimo de vanguardia. Experiencia multisensorial exclusiva con excelente gastronomía y orquesta de primer nivel en Puerto Madero.',
     tipo: 'show_completo', 
     precio_tipo: 'premium', 
     precio_valor: 35000,
@@ -291,8 +291,8 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
     nombre: 'La Catedral Club',
     descripcion: 'Catedral del tango alternativo y bohemio en Almagro. Estética rústica, clases grupales y milonga extendida bajo un enorme techo de madera.',
     tipo: 'baile', 
-    precio_tipo: 'economico', 
-    precio_valor: 10000,
+    precio_tipo: 'gratuito', 
+    precio_valor: 0,
     ambiente: 'techado', 
     horario_tipo: 'nocturno',
     hora_inicio: '18:00', 
@@ -392,7 +392,7 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
     descripcion: 'El punto de encuentro de los mejores bailarines del mundo en Palermo. Noches con orquestas en vivo, exhibiciones de campeones de tango de salón.',
     tipo: 'baile', 
     precio_tipo: 'economico', 
-    precio_valor: 12000,
+    precio_valor: 14000,
     ambiente: 'techado', 
     horario_tipo: 'nocturno',
     hora_inicio: '21:00', 
@@ -457,36 +457,30 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
 
     let res = (data || []) as Espectaculo[];
     
+    // Trigger the background restoration to Supabase once
+    if (!pricesUpdatedInSupabase) {
+      pricesUpdatedInSupabase = true;
+      restoreOriginalPricesToSupabase().then(() => {});
+    }
+
+    // Always map the correct original prices from MOCK_ESPECTACULOS at runtime for default shows
+    res = res.map(dbShow => {
+      const mockShow = MOCK_ESPECTACULOS.find(
+        m => m.nombre.toLowerCase().trim() === dbShow.nombre.toLowerCase().trim()
+      );
+      if (mockShow) {
+        return {
+          ...dbShow,
+          precio_valor: mockShow.precio_valor,
+          precio_tipo: mockShow.precio_tipo
+        };
+      }
+      return dbShow;
+    });
+
     // If database is completely empty (no rows), return mock data
     if (res.length === 0 && (!filtros.tipo && !filtros.ambiente && !filtros.horario && (!filtros.dias || filtros.dias.length === 0))) {
       res = [...MOCK_ESPECTACULOS];
-    } else if (res.length > 0) {
-      // If we have database records and they still have incorrect/buggy deterministic values,
-      // or if we need to restore them once:
-      const hasBuggyPrices = res.some(e => 
-        (e.nombre === 'Orquesta Típica Ciudad Baile' && e.precio_valor === 18500) || 
-        (e.nombre === 'La Catedral Club' && e.precio_valor === 21500) ||
-        (e.nombre === 'Rojo Tango (Hotel Faena)' && e.precio_valor === 0)
-      );
-      if (hasBuggyPrices && !pricesUpdatedInSupabase) {
-        pricesUpdatedInSupabase = true;
-        // Asynchronously restore the original prices to Supabase database in background
-        restoreOriginalPricesToSupabase().then(() => {});
-        
-        // At runtime, for this very first load, we temporarily map correct original prices
-        // from MOCK_ESPECTACULOS by name to res so they see them immediately without waiting for DB roundtrips!
-        res = res.map(dbShow => {
-          const mockShow = MOCK_ESPECTACULOS.find(m => m.nombre.toLowerCase().trim() === dbShow.nombre.toLowerCase().trim());
-          if (mockShow) {
-            return {
-              ...dbShow,
-              precio_valor: mockShow.precio_valor,
-              precio_tipo: mockShow.precio_tipo
-            };
-          }
-          return dbShow;
-        });
-      }
     }
 
     // In-memory price filtering
