@@ -1,5 +1,63 @@
-import { Espectaculo, FiltrosState, ConsultaLog } from './types';
+import { Espectaculo, FiltrosState, ConsultaLog, TipoPrecio } from './types';
 import { supabase } from './supabase';
+
+// Helper to deterministically assign random price between 5.000 and 30.000
+export function getDeterministicPrice(id: string): { valor: number; tipo: TipoPrecio } {
+  let hash = 0;
+  const str = id || '';
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const min = 5000;
+  const max = 30000;
+  const range = max - min;
+  const rawVal = Math.abs(hash) % (range + 1);
+  // Round to nearest 500 for clean currency display
+  const rounded = Math.round((min + rawVal) / 500) * 500;
+  const precio_valor = Math.min(max, Math.max(min, rounded));
+  // Divide into economic vs premium based on threshold
+  const precio_tipo: TipoPrecio = precio_valor <= 17500 ? 'economico' : 'premium';
+  return { valor: precio_valor, tipo: precio_tipo };
+}
+
+// Helper to apply random/deterministic prices and make exactly two shows free
+export function applyDeterministicPrices(list: Espectaculo[]): Espectaculo[] {
+  let mapped = list.map(e => {
+    // Force m2 (Tango en Plaza Dorrego) and m5 (Tango Callejero en Caminito) to be free
+    if (e.id === 'm2' || e.id === 'm5') {
+      return {
+        ...e,
+        precio_valor: 0,
+        precio_tipo: 'gratuito' as TipoPrecio
+      };
+    }
+    const { valor, tipo } = getDeterministicPrice(e.id);
+    return {
+      ...e,
+      precio_valor: valor,
+      precio_tipo: tipo
+    };
+  });
+
+  // If we have fewer than 2 free shows, force exactly two to be free
+  const freeCount = mapped.filter(e => e.precio_tipo === 'gratuito').length;
+  if (freeCount < 2 && mapped.length >= 2) {
+    const indicesToMakeFree = [1, 4].filter(idx => idx < mapped.length);
+    const finalIndices = indicesToMakeFree.length >= 2 ? indicesToMakeFree : [0, 1].slice(0, mapped.length);
+    mapped = mapped.map((e, index) => {
+      if (finalIndices.includes(index)) {
+        return {
+          ...e,
+          precio_valor: 0,
+          precio_tipo: 'gratuito' as TipoPrecio
+        };
+      }
+      return e;
+    });
+  }
+
+  return mapped;
+}
 
 // Helper to get persistent session id
 export function getSessionId(): string {
@@ -184,7 +242,6 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
     let q = supabase.from('espectaculos').select('*').eq('activo', true);
 
     if (filtros.tipo) q = q.eq('tipo', filtros.tipo);
-    if (filtros.precio) q = q.eq('precio_tipo', filtros.precio);
     if (filtros.ambiente) q = q.eq('ambiente', filtros.ambiente);
     if (filtros.horario) q = q.eq('horario_tipo', filtros.horario);
     
@@ -195,17 +252,25 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
 
     let res = (data || []) as Espectaculo[];
     
+    // If database is completely empty (no rows), return mock data
+    if (res.length === 0 && (!filtros.tipo && !filtros.ambiente && !filtros.horario && (!filtros.dias || filtros.dias.length === 0))) {
+      res = [...MOCK_ESPECTACULOS];
+    }
+
+    // Map prices randomly/deterministically between 5.000 and 30.000, ensuring two free shows
+    res = applyDeterministicPrices(res);
+
+    // In-memory price filtering
+    if (filtros.precio) {
+      res = res.filter(e => e.precio_tipo === filtros.precio);
+    }
+    
     // Day of week filtering
     if (filtros.dias && filtros.dias.length > 0) {
       res = res.filter(e => {
         const dWeek = e.dias_semana || [];
         return filtros.dias.some(day => dWeek.includes(day.toLowerCase()));
       });
-    }
-
-    // If database is completely empty (no rows), return mock data
-    if (res.length === 0 && (!filtros.tipo && !filtros.precio && !filtros.ambiente && !filtros.horario && (!filtros.dias || filtros.dias.length === 0))) {
-      return MOCK_ESPECTACULOS;
     }
     
     return res;
@@ -216,7 +281,9 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
 }
 
 function getMockEspectaculos(filtros: FiltrosState): Espectaculo[] {
-  return MOCK_ESPECTACULOS.filter(e => {
+  const mappedMocks = applyDeterministicPrices(MOCK_ESPECTACULOS);
+
+  return mappedMocks.filter(e => {
     if (filtros.tipo && e.tipo !== filtros.tipo) return false;
     if (filtros.precio && e.precio_tipo !== filtros.precio) return false;
     if (filtros.ambiente && e.ambiente !== filtros.ambiente) return false;
@@ -331,3 +398,28 @@ export async function adminEliminarEspectaculo(id: string): Promise<void> {
     }
   }
 }
+
+// Supabase Authentication Admin integration
+export async function loginAdmin(email: string, contrasena: string): Promise<any> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password: contrasena
+  });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function logoutAdmin(): Promise<void> {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function getLoggedAdmin(): Promise<any> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch {
+    return null;
+  }
+}
+

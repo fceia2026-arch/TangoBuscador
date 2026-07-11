@@ -41,6 +41,85 @@ app.post('/api/gemini/search', async (req, res) => {
     return;
   }
 
+  // Fallback heuristic search if GEMINI_API_KEY is not configured
+  if (!process.env.GEMINI_API_KEY) {
+    const queryLower = query.toLowerCase();
+    
+    let tipo = '';
+    if (queryLower.includes('baile') || queryLower.includes('milonga') || queryLower.includes('pista')) {
+      tipo = 'baile';
+    } else if (queryLower.includes('cantado') || queryLower.includes('concierto') || queryLower.includes('orquesta') || queryLower.includes('cantante') || queryLower.includes('música') || queryLower.includes('musica')) {
+      tipo = 'cantado';
+    } else if (queryLower.includes('cena') || queryLower.includes('completo') || queryLower.includes('show') || queryLower.includes('espectáculo') || queryLower.includes('espectaculo')) {
+      tipo = 'show_completo';
+    }
+    
+    let precio = '';
+    if (queryLower.includes('gratis') || queryLower.includes('gratuito') || queryLower.includes('sin costo') || queryLower.includes('libre')) {
+      precio = 'gratuito';
+    } else if (queryLower.includes('económico') || queryLower.includes('economico') || queryLower.includes('barato') || queryLower.includes('accesible')) {
+      precio = 'economico';
+    } else if (queryLower.includes('premium') || queryLower.includes('caro') || queryLower.includes('lujo') || queryLower.includes('internacional')) {
+      precio = 'premium';
+    }
+    
+    let ambiente = '';
+    if (queryLower.includes('aire libre') || queryLower.includes('plaza') || queryLower.includes('calle') || queryLower.includes('afuera') || queryLower.includes('caminito') || queryLower.includes('parque')) {
+      ambiente = 'aire_libre';
+    } else if (queryLower.includes('techado') || queryLower.includes('salón') || queryLower.includes('salon') || queryLower.includes('adentro') || queryLower.includes('teatro') || queryLower.includes('club')) {
+      ambiente = 'techado';
+    }
+    
+    let horario = '';
+    if (queryLower.includes('tarde') || queryLower.includes('vespertino') || queryLower.includes('día') || queryLower.includes('dia')) {
+      horario = 'vespertino';
+    } else if (queryLower.includes('noche') || queryLower.includes('nocturno') || queryLower.includes('trasnoche') || queryLower.includes('madrugada')) {
+      horario = 'nocturno';
+    }
+    
+    const dias: string[] = [];
+    const diasSemana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+    diasSemana.forEach(d => {
+      const normD = d === 'miercoles' ? 'miércoles' : d === 'sabado' ? 'sábado' : d;
+      if (queryLower.includes(d) || queryLower.includes(normD)) {
+        dias.push(d);
+      }
+    });
+    if (queryLower.includes('finde') || queryLower.includes('fin de semana')) {
+      if (!dias.includes('sabado')) dias.push('sabado');
+      if (!dias.includes('domingo')) dias.push('domingo');
+    }
+    
+    // Check if query implies "today" or "tomorrow"
+    if (queryLower.includes('hoy') || queryLower.includes('esta noche')) {
+      const todayIdx = new Date().getDay();
+      const todayName = diasSemana[(todayIdx + 6) % 7];
+      if (!dias.includes(todayName)) dias.push(todayName);
+    } else if (queryLower.includes('mañana') || queryLower.includes('manana')) {
+      const tomorrowIdx = (new Date().getDay() + 1) % 7;
+      const tomorrowName = diasSemana[(tomorrowIdx + 6) % 7];
+      if (!dias.includes(tomorrowName)) dias.push(tomorrowName);
+    }
+
+    const labelsTipo: Record<string, string> = { baile: 'Solo Baile / Milonga 💃', cantado: 'Cantado / Concierto 🎤', show_completo: 'Cena Show 🎭' };
+    const labelsPrecio: Record<string, string> = { gratuito: 'Gratuito 🟢', economico: 'Económico 🔵', premium: 'Premium 🟡' };
+    const labelsAmbiente: Record<string, string> = { aire_libre: 'Al Aire Libre ☀️', techado: 'Sala Techada 🏛️' };
+    const labelsHorario: Record<string, string> = { vespertino: 'Vespertino 🌅', nocturno: 'Nocturno 🌙' };
+
+    const detectedFiltrosDesc = [
+      tipo ? `Tipo: ${labelsTipo[tipo]}` : '',
+      precio ? `Precio: ${labelsPrecio[precio]}` : '',
+      ambiente ? `Ambiente: ${labelsAmbiente[ambiente]}` : '',
+      horario ? `Horario: ${labelsHorario[horario]}` : '',
+      dias.length > 0 ? `Días: ${dias.join(', ')}` : ''
+    ].filter(Boolean).join(' | ');
+
+    const explicacion = `⚠️ [Modo Offline Activo] Se aplicó una búsqueda heurística local porque la variable GEMINI_API_KEY no está configurada. Para habilitar la IA completa de Gemini, por favor añádela en la sección Settings > Secrets de AI Studio, o en las variables de entorno de Vercel. Filtros aplicados localmente: ${detectedFiltrosDesc || 'Todos los espectáculos'}`;
+
+    res.json({ tipo, precio, ambiente, horario, dias, explicacion });
+    return;
+  }
+
   try {
     const ai = getGeminiClient();
     

@@ -43,6 +43,17 @@ export interface ClimaState {
   esIdeal: boolean;
 }
 
+export interface ForecastDia {
+  fecha: string;
+  temperaturaMax: number;
+  temperaturaMin: number;
+  probabilidadPrecipitacion: number;
+  codigo: number;
+  condicion: string;
+  emoji: string;
+  esLluvia: boolean;
+}
+
 export interface FiltrosState {
   tipo: string; // 'baile' | 'cantado' | 'show_completo' | ''
   precio: string; // 'gratuito' | 'economico' | 'premium' | ''

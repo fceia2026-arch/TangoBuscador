@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Espectaculo, 
   ClimaState, 
+  ForecastDia,
   FiltrosState, 
   ConsultaLog, 
   TipoEspectaculo, 
@@ -9,6 +10,7 @@ import {
   TipoAmbiente, 
   TipoHorario 
 } from './types';
+import { TangoPlayer } from './components/TangoPlayer';
 import { 
   getEspectaculos, 
   registrarConsulta, 
@@ -17,7 +19,10 @@ import {
   getSessionId,
   adminAgregarEspectaculo,
   adminActualizarEspectaculo,
-  adminEliminarEspectaculo
+  adminEliminarEspectaculo,
+  loginAdmin,
+  logoutAdmin,
+  getLoggedAdmin
 } from './db';
 
 // Helper lists
@@ -43,6 +48,7 @@ export default function App() {
   const [espectaculos, setEspectaculos] = useState<Espectaculo[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [clima, setClima] = useState<ClimaState | null>(null);
+  const [forecast, setForecast] = useState<ForecastDia[]>([]);
   const [consultasCount, setConsultasCount] = useState<number>(0);
   const [sortBy, setSortBy] = useState<string>('relevancia');
 
@@ -60,10 +66,19 @@ export default function App() {
     dias: []
   });
 
+  const [tempFilters, setTempFilters] = useState<FiltrosState>({
+    tipo: '',
+    precio: '',
+    ambiente: '',
+    horario: '',
+    dias: []
+  });
+
   // Calendar Picker states
   const [calAnio, setCalAnio] = useState<number>(new Date().getFullYear());
   const [calMes, setCalMes] = useState<number>(new Date().getMonth());
   const [calSelectedDates, setCalSelectedDates] = useState<string[]>([]); // Array of 'YYYY-MM-DD'
+  const [tempCalSelectedDates, setTempCalSelectedDates] = useState<string[]>([]);
 
   // Modal detail states
   const [selectedShow, setSelectedShow] = useState<Espectaculo | null>(null);
@@ -74,6 +89,8 @@ export default function App() {
   // Analytics panel state
   const [analyticsOpen, setAnalyticsOpen] = useState<boolean>(false);
   const [rawLogs, setRawLogs] = useState<ConsultaLog[]>([]);
+  const [fechaDesde, setFechaDesde] = useState<string>('');
+  const [fechaHasta, setFechaHasta] = useState<string>('');
 
   // Admin section states
   const [adminLoggedIn, setAdminLoggedIn] = useState<boolean>(false);
@@ -109,6 +126,19 @@ export default function App() {
   // Password reset state
   const [newPassword, setNewPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+  const [showAdminPassword, setShowAdminPassword] = useState<boolean>(false);
+
+  // Date and Time state for the weather widget
+  const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Refs for Leaflet Map objects to prevent re-initialization error
   const mapContainerRef = useRef<any>(null);
@@ -116,10 +146,19 @@ export default function App() {
   const userLocationMarkerRef = useRef<any>(null);
   const miniMapContainerRef = useRef<any>(null);
 
-  // Load weather and initial counter on mount
+  // Load weather, initial counter, and check admin session on mount
   useEffect(() => {
     fetchWeather();
     fetchCounters();
+    
+    // Check if an admin is already logged in via Supabase
+    getLoggedAdmin().then(user => {
+      if (user) {
+        setAdminLoggedIn(true);
+        setAdminEmail(user.email || '');
+        loadAllAdminShows();
+      }
+    });
   }, []);
 
   // Sync / refresh spettacoli list whenever filters or weather change
@@ -136,19 +175,19 @@ export default function App() {
 
   // Sync days of week filter when selected calendar dates change
   useEffect(() => {
-    if (calSelectedDates.length === 0) {
-      setFilters(prev => ({ ...prev, dias: [] }));
+    if (tempCalSelectedDates.length === 0) {
+      setTempFilters(prev => ({ ...prev, dias: [] }));
       return;
     }
-    const derivedDays = calSelectedDates.map(dateStr => {
+    const derivedDays = tempCalSelectedDates.map(dateStr => {
       const [year, month, day] = dateStr.split('-').map(Number);
       const dateObj = new Date(year, month - 1, day);
       return DIAS_SIMPLES[dateObj.getDay()];
     });
     // Deduplicate
     const uniqueDays = Array.from(new Set(derivedDays));
-    setFilters(prev => ({ ...prev, dias: uniqueDays }));
-  }, [calSelectedDates]);
+    setTempFilters(prev => ({ ...prev, dias: uniqueDays }));
+  }, [tempCalSelectedDates]);
 
   // Setup toast auto-cleanup
   useEffect(() => {
@@ -167,7 +206,7 @@ export default function App() {
   const fetchWeather = async () => {
     const lat = -34.6037;
     const lon = -58.3816;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&timezone=America%2FArgentina%2FBuenos_Aires`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=America%2FArgentina%2FBuenos_Aires&forecast_days=14`;
 
     const weatherCodesLluvia = [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99];
     const weatherDescriptions: Record<number, string> = {
@@ -198,9 +237,27 @@ export default function App() {
         condicion: weatherDescriptions[wCode] || 'Variable',
         emoji: weatherEmojis[wCode] || '🌡️',
         esLluvia: weatherCodesLluvia.includes(wCode),
-        esFrio: temp < 8,
-        esIdeal: temp >= 16 && temp <= 26 && !weatherCodesLluvia.includes(wCode)
+        esFrio: temp < 12,
+        esIdeal: temp >= 19 && temp <= 26 && !weatherCodesLluvia.includes(wCode)
       });
+
+      if (data.daily) {
+        const dailyData = data.daily;
+        const mappedForecast: ForecastDia[] = dailyData.time.map((timeStr: string, idx: number) => {
+          const code = dailyData.weather_code[idx];
+          return {
+            fecha: timeStr,
+            temperaturaMax: Math.round(dailyData.temperature_2m_max[idx]),
+            temperaturaMin: Math.round(dailyData.temperature_2m_min[idx]),
+            probabilidadPrecipitacion: dailyData.precipitation_probability_max[idx],
+            codigo: code,
+            condicion: weatherDescriptions[code] || 'Variable',
+            emoji: weatherEmojis[code] || '🌡️',
+            esLluvia: weatherCodesLluvia.includes(code)
+          };
+        });
+        setForecast(mappedForecast);
+      }
     } catch (err) {
       console.warn('Fallo al obtener clima real, usando valores predeterminados de Buenos Aires.');
       setClima({
@@ -215,6 +272,30 @@ export default function App() {
         esFrio: false,
         esIdeal: true
       });
+
+      // Generate realistic winter/spring weather for Buenos Aires
+      const mockForecast: ForecastDia[] = [];
+      const today = new Date();
+      for (let i = 0; i < 14; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const dateStr = `${yyyy}-${mm}-${dd}`;
+        const isRainy = i % 5 === 0;
+        mockForecast.push({
+          fecha: dateStr,
+          temperaturaMax: 14 + (i % 4),
+          temperaturaMin: 7 + (i % 3),
+          probabilidadPrecipitacion: isRainy ? 60 : 10,
+          codigo: isRainy ? 61 : 1,
+          condicion: isRainy ? 'Lluvia leve' : 'Mayormente despejado',
+          emoji: isRainy ? '🌧️' : '🌤️',
+          esLluvia: isRainy
+        });
+      }
+      setForecast(mockForecast);
     }
   };
 
@@ -322,12 +403,15 @@ export default function App() {
           }
         });
         setCalSelectedDates(mappedDates);
+        setTempCalSelectedDates(mappedDates);
       } else {
         setCalSelectedDates([]);
+        setTempCalSelectedDates([]);
       }
 
       // Update state
       setFilters(newFilters);
+      setTempFilters(newFilters);
       setAiResponseText(filtersResult.explicacion);
       triggerToast('Búsqueda interpretada por IA aplicada', 'success');
 
@@ -345,7 +429,7 @@ export default function App() {
   const selectFilter = (key: keyof FiltrosState, value: string) => {
     // Clear AI explanation text when manual filters are operated
     setAiResponseText(null);
-    setFilters(prev => ({
+    setTempFilters(prev => ({
       ...prev,
       [key]: value
     }));
@@ -359,10 +443,24 @@ export default function App() {
       horario: '',
       dias: []
     });
+    setTempFilters({
+      tipo: '',
+      precio: '',
+      ambiente: '',
+      horario: '',
+      dias: []
+    });
     setCalSelectedDates([]);
+    setTempCalSelectedDates([]);
     setAiQuery('');
     setAiResponseText(null);
     triggerToast('Filtros restablecidos', 'success');
+  };
+
+  const applyManualFilters = () => {
+    setFilters(tempFilters);
+    setCalSelectedDates(tempCalSelectedDates);
+    triggerToast('Filtros aplicados. Mostrando resultados.', 'success');
   };
 
   // Sorting results helper
@@ -402,7 +500,7 @@ export default function App() {
 
   const toggleCalendarDate = (dateStr: string) => {
     setAiResponseText(null);
-    setCalSelectedDates(prev => {
+    setTempCalSelectedDates(prev => {
       if (prev.includes(dateStr)) {
         return prev.filter(d => d !== dateStr);
       } else {
@@ -432,7 +530,7 @@ export default function App() {
       const dateStr = `${calAnio}-${String(calMes + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const isPast = currentDate < today;
       const isToday = currentDate.getTime() === today.getTime();
-      const isSelected = calSelectedDates.includes(dateStr);
+      const isSelected = tempCalSelectedDates.includes(dateStr);
 
       daysElements.push(
         <button
@@ -467,115 +565,175 @@ export default function App() {
       // Map container element
       const mapDiv = document.getElementById('mapa-principal');
       if (mapDiv) {
-        const mapInstance = L.map('mapa-principal', {
-          center: [-34.6037, -58.3816],
-          zoom: 12,
-          scrollWheelZoom: true
-        });
-
-        // Use modern clean light map theme
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: 'abcd',
-          maxZoom: 20
-        }).addTo(mapInstance);
-
-        markersLayerRef.current = L.layerGroup().addTo(mapInstance);
-        mapContainerRef.current = mapInstance;
-
-        // Try gathering and displaying user geoloc
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(position => {
-            const { latitude, longitude } = position.coords;
-            const latVal = Number(latitude);
-            const lngVal = Number(longitude);
-            if (isNaN(latVal) || isNaN(lngVal)) return;
-
-            const pulseIcon = L.divIcon({
-              html: `<span class="relative flex h-4 w-4">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600 border border-white"></span>
-              </span>`,
-              className: 'custom-user-marker',
-              iconSize: [16, 16],
-              iconAnchor: [8, 8]
-            });
-            userLocationMarkerRef.current = L.marker([latVal, lngVal], { icon: pulseIcon })
-              .addTo(mapInstance)
-              .bindPopup('<b>📍 Tu ubicación actual</b>');
+        try {
+          const mapInstance = L.map('mapa-principal', {
+            center: [-34.6037, -58.3816],
+            zoom: 12,
+            scrollWheelZoom: true
           });
+
+          // Use modern clean light map theme
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+          }).addTo(mapInstance);
+
+          markersLayerRef.current = L.layerGroup().addTo(mapInstance);
+          mapContainerRef.current = mapInstance;
+
+          // Try gathering and displaying user geoloc
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(position => {
+              try {
+                if (position && position.coords) {
+                  const { latitude, longitude } = position.coords;
+                  if (latitude !== null && latitude !== undefined && longitude !== null && longitude !== undefined) {
+                    const latVal = Number(latitude);
+                    const lngVal = Number(longitude);
+                    if (!isNaN(latVal) && !isNaN(lngVal) && latVal >= -90 && latVal <= 90 && lngVal >= -180 && lngVal <= 180) {
+                      const pulseIcon = L.divIcon({
+                        html: `<span class="relative flex h-4 w-4">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600 border border-white"></span>
+                        </span>`,
+                        className: 'custom-user-marker',
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                      });
+                      
+                      if (userLocationMarkerRef.current) {
+                        try {
+                          userLocationMarkerRef.current.remove();
+                        } catch (e) {}
+                      }
+
+                      userLocationMarkerRef.current = L.marker([latVal, lngVal], { icon: pulseIcon })
+                        .addTo(mapInstance)
+                        .bindPopup('<b>📍 Tu ubicación actual</b>');
+                    }
+                  }
+                }
+              } catch (err) {
+                console.warn("Error setting user location marker:", err);
+              }
+            }, err => {
+              console.warn("Geolocation denied or failed:", err);
+            });
+          }
+        } catch (err) {
+          console.error("Error creating map principal:", err);
         }
       }
     }
 
     // Refresh markers based on the results list
     if (markersLayerRef.current && mapContainerRef.current) {
-      markersLayerRef.current.clearLayers();
-      const points: [number, number][] = [];
+      try {
+        markersLayerRef.current.clearLayers();
+        const points: [number, number][] = [];
 
-      espectaculos.forEach(show => {
-        const latVal = Number(show.latitud);
-        const lngVal = Number(show.longitud);
-        if (show.latitud === null || show.latitud === undefined || show.longitud === null || show.longitud === undefined || isNaN(latVal) || isNaN(lngVal)) return;
+        espectaculos.forEach(show => {
+          try {
+            if (show.latitud === null || show.latitud === undefined || show.longitud === null || show.longitud === undefined) return;
+            const cleanLat = String(show.latitud).replace(',', '.').trim();
+            const cleanLng = String(show.longitud).replace(',', '.').trim();
+            if (cleanLat === '' || cleanLng === '' || cleanLat === 'null' || cleanLng === 'null' || cleanLat === 'undefined' || cleanLng === 'undefined') return;
+            const latVal = Number(cleanLat);
+            const lngVal = Number(cleanLng);
+            if (isNaN(latVal) || isNaN(lngVal) || latVal < -90 || latVal > 90 || lngVal < -180 || lngVal > 180) return;
 
-        const colorMap: Record<string, string> = {
-          gratuito: '#10b981', // green
-          economico: '#3b82f6', // blue
-          premium: '#f59e0b' // gold/amber
-        };
-        const color = colorMap[show.precio_tipo] || '#ef4444';
+            const colorMap: Record<string, string> = {
+              gratuito: '#10b981', // green
+              economico: '#3b82f6', // blue
+              premium: '#f59e0b' // gold/amber
+            };
+            const color = colorMap[show.precio_tipo] || '#ef4444';
 
-        const emojiMap: Record<string, string> = {
-          baile: '💃',
-          cantado: '🎤',
-          show_completo: '🎭'
-        };
-        const emoji = emojiMap[show.tipo] || '🎵';
-        
-        const highlightBorder = show.climaDestacado ? 'border-2 border-amber-400 shadow-md animate-pulse' : 'border border-white';
+            const emojiMap: Record<string, string> = {
+              baile: '💃',
+              cantado: '🎤',
+              show_completo: '🎭'
+            };
+            const emoji = emojiMap[show.tipo] || '🎵';
+            
+            const highlightBorder = show.climaDestacado ? 'border-2 border-amber-400 shadow-md animate-pulse' : 'border border-white';
 
-        const customIcon = L.divIcon({
-          html: `<div style="background:${color};" class="w-8 h-8 rounded-full ${highlightBorder} flex items-center justify-center shadow text-sm transform hover:scale-110 transition-transform">
-            <span>${emoji}</span>
-          </div>`,
-          className: 'custom-leaflet-marker',
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-          popupAnchor: [0, -16]
+            const customIcon = L.divIcon({
+              html: `<div style="background:${color};" class="w-8 h-8 rounded-full ${highlightBorder} flex items-center justify-center shadow text-sm transform hover:scale-110 transition-transform">
+                <span>${emoji}</span>
+              </div>`,
+              className: 'custom-leaflet-marker',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16],
+              popupAnchor: [0, -16]
+            });
+
+            const popupHtml = `
+              <div class="p-2 font-sans max-w-xs">
+                <h4 class="font-bold text-slate-800 text-sm mb-1">${show.nombre}</h4>
+                <div class="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                  <i class="fa fa-map-marker-alt text-blue-500"></i> ${show.barrio}
+                </div>
+                <div class="text-xs text-slate-500 mb-2">
+                  🕐 ${show.hora_inicio} - ${show.hora_fin}
+                </div>
+                <button 
+                  data-id="${show.id}"
+                  onclick="document.dispatchEvent(new CustomEvent('ver-detalle', { detail: '${show.id}' }))"
+                  class="ver-detalle-btn w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow transition-colors cursor-pointer"
+                >
+                  Ver detalles →
+                </button>
+              </div>
+            `;
+
+            const marker = L.marker([latVal, lngVal], { icon: customIcon })
+              .bindPopup(popupHtml)
+              .addTo(markersLayerRef.current);
+
+            points.push([latVal, lngVal]);
+          } catch (err) {
+            console.error("Error creating marker for show:", show.id, err);
+          }
         });
 
-        const popupHtml = `
-          <div class="p-2 font-sans max-w-xs">
-            <h4 class="font-bold text-slate-800 text-sm mb-1">${show.nombre}</h4>
-            <div class="text-xs text-slate-500 mb-1 flex items-center gap-1">
-              <i class="fa fa-map-marker-alt text-blue-500"></i> ${show.barrio}
-            </div>
-            <div class="text-xs text-slate-500 mb-2">
-              🕐 ${show.hora_inicio} - ${show.hora_fin}
-            </div>
-            <button 
-              onclick="document.dispatchEvent(new CustomEvent('ver-detalle', { detail: '${show.id}' }))"
-              class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow transition-colors cursor-pointer"
-            >
-              Ver detalles →
-            </button>
-          </div>
-        `;
+        // Fit map boundary gracefully
+        if (points.length > 0 && mapContainerRef.current) {
+          try {
+            mapContainerRef.current.flyToBounds(points, {
+              padding: [50, 50],
+              maxZoom: 15,
+              duration: 1.2
+            });
+          } catch (err) {
+            console.warn("Error flying to bounds:", err);
+          }
+        }
 
-        const marker = L.marker([latVal, lngVal], { icon: customIcon })
-          .bindPopup(popupHtml)
-          .addTo(markersLayerRef.current);
-
-        points.push([latVal, lngVal]);
-      });
-
-      // Fit map boundary gracefully
-      if (points.length > 0 && mapContainerRef.current) {
-        mapContainerRef.current.flyToBounds(points, {
-          padding: [50, 50],
-          maxZoom: 15,
-          duration: 1.2
-        });
+        // Listen to popup open to bind click handler to the detail button inside the popup
+        if (mapContainerRef.current) {
+          mapContainerRef.current.off('popupopen');
+          mapContainerRef.current.on('popupopen', (e: any) => {
+            const popupNode = e.popup.getElement();
+            if (popupNode) {
+              const btn = popupNode.querySelector('.ver-detalle-btn');
+              if (btn) {
+                const showId = btn.getAttribute('data-id');
+                const found = espectaculos.find(s => s.id === showId);
+                if (found) {
+                  btn.addEventListener('click', (ev: MouseEvent) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    setSelectedShow(found);
+                  });
+                }
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Error updating map markers layer:", err);
       }
     }
   };
@@ -585,12 +743,22 @@ export default function App() {
     if (navigator.geolocation && mapContainerRef.current) {
       navigator.geolocation.getCurrentPosition(
         pos => {
-          const latVal = Number(pos.coords.latitude);
-          const lngVal = Number(pos.coords.longitude);
-          if (!isNaN(latVal) && !isNaN(lngVal)) {
-            mapContainerRef.current.flyTo([latVal, lngVal], 14, { duration: 1.5 });
-          } else {
-            triggerToast('Ubicación del usuario no válida', 'error');
+          try {
+            if (pos && pos.coords) {
+              const { latitude, longitude } = pos.coords;
+              if (latitude !== null && latitude !== undefined && longitude !== null && longitude !== undefined) {
+                const latVal = Number(latitude);
+                const lngVal = Number(longitude);
+                if (!isNaN(latVal) && !isNaN(lngVal) && latVal >= -90 && latVal <= 90 && lngVal >= -180 && lngVal <= 180) {
+                  mapContainerRef.current.flyTo([latVal, lngVal], 14, { duration: 1.5 });
+                  return;
+                }
+              }
+            }
+            triggerToast('Ubicación del usuario no válida o fuera de rango', 'error');
+          } catch (err) {
+            console.error("Error centering map on user:", err);
+            triggerToast('Error al centrar mapa en tu ubicación', 'error');
           }
         },
         () => {
@@ -602,7 +770,7 @@ export default function App() {
     }
   };
 
-  // Listen to custom details click events dispatched from Leaflet popups
+  // Listen to custom details click events dispatched from Leaflet popups or button clicks
   useEffect(() => {
     const handleDetailEvent = (e: any) => {
       const showId = e.detail;
@@ -610,12 +778,33 @@ export default function App() {
       if (found) setSelectedShow(found);
     };
 
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const btn = target.closest('.ver-detalle-btn');
+      if (btn) {
+        const showId = btn.getAttribute('data-id');
+        if (showId) {
+          const found = espectaculos.find(s => s.id === showId);
+          if (found) {
+            setSelectedShow(found);
+          }
+        }
+      }
+    };
+
     document.addEventListener('ver-detalle', handleDetailEvent);
-    return () => document.removeEventListener('ver-detalle', handleDetailEvent);
+    document.addEventListener('click', handleGlobalClick);
+    
+    return () => {
+      document.removeEventListener('ver-detalle', handleDetailEvent);
+      document.removeEventListener('click', handleGlobalClick);
+    };
   }, [espectaculos]);
 
   // Modal MiniMap mounting
   useEffect(() => {
+    let timeoutId: any = null;
+
     // Always clean up previous map if it exists
     if (miniMapContainerRef.current) {
       try {
@@ -627,17 +816,20 @@ export default function App() {
     }
 
     if (selectedShow && (window as any).L) {
-      setTimeout(() => {
-        const L = (window as any).L;
-        const minimapDiv = document.getElementById('minimapa-modal');
-        if (minimapDiv && !miniMapContainerRef.current) {
-          const latVal = Number(selectedShow.latitud);
-          const lngVal = Number(selectedShow.longitud);
-          if (selectedShow.latitud === null || selectedShow.latitud === undefined || selectedShow.longitud === null || selectedShow.longitud === undefined || isNaN(latVal) || isNaN(lngVal)) {
-            return;
-          }
+      timeoutId = setTimeout(() => {
+        try {
+          const L = (window as any).L;
+          const minimapDiv = document.getElementById('minimapa-modal');
+          if (minimapDiv && !miniMapContainerRef.current) {
+            const cleanLat = String(selectedShow.latitud || '').replace(',', '.').trim();
+            const cleanLng = String(selectedShow.longitud || '').replace(',', '.').trim();
+            const latVal = Number(cleanLat);
+            const lngVal = Number(cleanLng);
+            
+            if (!selectedShow.latitud || !selectedShow.longitud || isNaN(latVal) || isNaN(lngVal) || latVal < -90 || latVal > 90 || lngVal < -180 || lngVal > 180) {
+              return;
+            }
 
-          try {
             const miniMap = L.map('minimapa-modal', {
               center: [latVal, lngVal],
               zoom: 15,
@@ -653,29 +845,47 @@ export default function App() {
 
             L.marker([latVal, lngVal]).addTo(miniMap);
             miniMapContainerRef.current = miniMap;
-          } catch (e) {
-            console.error('Error creating miniMap:', e);
           }
+        } catch (e) {
+          console.error('Error creating miniMap:', e);
         }
       }, 150);
     }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [selectedShow]);
 
   // Handle analytics panel statistics aggregation
   const handleOpenAnalytics = async () => {
     setAnalyticsOpen(prev => !prev);
     try {
-      const data = await getLogsKNIME(30);
+      const data = await getLogsKNIME(300);
       setRawLogs(data);
     } catch (err) {
       console.warn('Could not load raw logs:', err);
     }
   };
 
+  // Obtener logs filtrados por rango de fecha
+  const getLogsFiltrados = (): ConsultaLog[] => {
+    return rawLogs.filter(log => {
+      if (!log.fecha) return true;
+      const fechaLog = log.fecha.split('T')[0]; // YYYY-MM-DD
+      if (fechaDesde && fechaLog < fechaDesde) return false;
+      if (fechaHasta && fechaLog > fechaHasta) return false;
+      return true;
+    });
+  };
+
   const computeMostUsedFilter = (): string => {
-    if (rawLogs.length === 0) return 'Sin datos';
+    const logsFiltrados = getLogsFiltrados();
+    if (logsFiltrados.length === 0) return 'Sin datos';
     const counts: Record<string, number> = {};
-    rawLogs.forEach(log => {
+    logsFiltrados.forEach(log => {
       if (log.filtro_tipo) counts[log.filtro_tipo] = (counts[log.filtro_tipo] || 0) + 1;
       if (log.filtro_precio) counts[log.filtro_precio] = (counts[log.filtro_precio] || 0) + 1;
       if (log.filtro_ambiente) counts[log.filtro_ambiente] = (counts[log.filtro_ambiente] || 0) + 1;
@@ -693,6 +903,166 @@ export default function App() {
       vespertino: 'Tarde', nocturno: 'Noche'
     };
     return labels[top] || top;
+  };
+
+  // Agrupar consultas por día o por hora para el gráfico de volumen temporal
+  const agruparConsultas = () => {
+    const logsFiltrados = getLogsFiltrados();
+    if (logsFiltrados.length === 0) return [];
+    
+    // Contar días únicos para decidir si agrupar por hora o por día (en hora local para evitar discrepancia de huso horario)
+    const diasUnicos = new Set<string>();
+    logsFiltrados.forEach(log => {
+      if (log.fecha) {
+        const dObj = new Date(log.fecha);
+        const localDateKey = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+        diasUnicos.add(localDateKey);
+      }
+    });
+
+    const agruparPorHora = diasUnicos.size <= 2;
+    const grupos: Record<string, { total: number; ia: number; filtros: number }> = {};
+
+    logsFiltrados.forEach(log => {
+      if (!log.fecha) return;
+      const fechaObj = new Date(log.fecha);
+      let label = '';
+      if (agruparPorHora) {
+        label = `${String(fechaObj.getHours()).padStart(2, '0')}:00`;
+      } else {
+        label = `${String(fechaObj.getDate()).padStart(2, '0')}/${String(fechaObj.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      if (!grupos[label]) {
+        grupos[label] = { total: 0, ia: 0, filtros: 0 };
+      }
+      grupos[label].total += 1;
+      if (log.uso_gemini) {
+        grupos[label].ia += 1;
+      } else {
+        grupos[label].filtros += 1;
+      }
+    });
+
+    const items = Object.entries(grupos).map(([key, value]) => ({
+      label: key,
+      ...value
+    }));
+
+    if (agruparPorHora) {
+      items.sort((a, b) => parseInt(a.label) - parseInt(b.label));
+    } else {
+      items.sort((a, b) => {
+        const [diaA, mesA] = a.label.split('/').map(Number);
+        const [diaB, mesB] = b.label.split('/').map(Number);
+        if (mesA !== mesB) return mesA - mesB;
+        return diaA - diaB;
+      });
+    }
+
+    return items;
+  };
+
+  // Agrupar los tipos de shows pedidos por los usuarios
+  const agruparPorTipoShow = () => {
+    const logsFiltrados = getLogsFiltrados();
+    const conteo = {
+      baile: 0,
+      cantado: 0,
+      show_completo: 0,
+      general: 0
+    };
+
+    logsFiltrados.forEach(log => {
+      const t = log.filtro_tipo;
+      if (t === 'baile') conteo.baile += 1;
+      else if (t === 'cantado') conteo.cantado += 1;
+      else if (t === 'show_completo') conteo.show_completo += 1;
+      else conteo.general += 1;
+    });
+
+    const total = logsFiltrados.length || 1;
+    return [
+      { id: 'baile', nombre: 'Milonga / Baile 💃', valor: conteo.baile, color: 'bg-emerald-500', barColor: '#10b981', pct: Math.round((conteo.baile / total) * 100) },
+      { id: 'cantado', nombre: 'Concierto Vocal / Instrumental 🎵', valor: conteo.cantado, color: 'bg-indigo-500', barColor: '#6366f1', pct: Math.round((conteo.cantado / total) * 100) },
+      { id: 'show_completo', nombre: 'Show completo 🍽️', valor: conteo.show_completo, color: 'bg-amber-500', barColor: '#f59e0b', pct: Math.round((conteo.show_completo / total) * 100) },
+      { id: 'general', nombre: 'Sin preferencia de tipo de espectáculo 🔍', valor: conteo.general, color: 'bg-slate-500', barColor: '#64748b', pct: Math.round((conteo.general / total) * 100) }
+    ].sort((a, b) => b.valor - a.valor);
+  };
+
+  // Agrupar las preferencias de horarios pedidas por los usuarios
+  const agruparPorHorario = () => {
+    const logsFiltrados = getLogsFiltrados();
+    const conteo = {
+      vespertino: 0,
+      nocturno: 0,
+      general: 0
+    };
+
+    logsFiltrados.forEach(log => {
+      const h = log.filtro_horario;
+      if (h === 'vespertino') conteo.vespertino += 1;
+      else if (h === 'nocturno') conteo.nocturno += 1;
+      else conteo.general += 1;
+    });
+
+    const total = logsFiltrados.length || 1;
+    return [
+      { id: 'vespertino', nombre: 'Tarde / Vespertino 🌇', valor: conteo.vespertino, color: 'bg-orange-400', barColor: '#fb923c', pct: Math.round((conteo.vespertino / total) * 100) },
+      { id: 'nocturno', nombre: 'Noche / Nocturno 🌃', valor: conteo.nocturno, color: 'bg-violet-600', barColor: '#7c3aed', pct: Math.round((conteo.nocturno / total) * 100) },
+      { id: 'general', nombre: 'Sin preferencia horaria 🕒', valor: conteo.general, color: 'bg-slate-400', barColor: '#94a3b8', pct: Math.round((conteo.general / total) * 100) }
+    ].sort((a, b) => b.valor - a.valor);
+  };
+
+  // Agrupar las preferencias de ambiente pedidas por los usuarios
+  const agruparPorAmbiente = () => {
+    const logsFiltrados = getLogsFiltrados();
+    const conteo = {
+      aire_libre: 0,
+      techado: 0,
+      general: 0
+    };
+
+    logsFiltrados.forEach(log => {
+      const a = log.filtro_ambiente;
+      if (a === 'aire_libre') conteo.aire_libre += 1;
+      else if (a === 'techado') conteo.techado += 1;
+      else conteo.general += 1;
+    });
+
+    const total = logsFiltrados.length || 1;
+    return [
+      { id: 'aire_libre', nombre: 'Al Aire Libre 🌳', valor: conteo.aire_libre, color: 'bg-teal-500', barColor: '#14b8a6', pct: Math.round((conteo.aire_libre / total) * 100) },
+      { id: 'techado', nombre: 'Interior / Techado 🏠', valor: conteo.techado, color: 'bg-cyan-600', barColor: '#0891b2', pct: Math.round((conteo.techado / total) * 100) },
+      { id: 'general', nombre: 'Sin preferencia ambiente 🌍', valor: conteo.general, color: 'bg-slate-400', barColor: '#94a3b8', pct: Math.round((conteo.general / total) * 100) }
+    ].sort((a, b) => b.valor - a.valor);
+  };
+
+  // Agrupar las preferencias de rangos de precio pedidas por los usuarios
+  const agruparPorPrecio = () => {
+    const logsFiltrados = getLogsFiltrados();
+    const conteo = {
+      gratuito: 0,
+      economico: 0,
+      premium: 0,
+      general: 0
+    };
+
+    logsFiltrados.forEach(log => {
+      const p = log.filtro_precio;
+      if (p === 'gratuito') conteo.gratuito += 1;
+      else if (p === 'economico') conteo.economico += 1;
+      else if (p === 'premium') conteo.premium += 1;
+      else conteo.general += 1;
+    });
+
+    const total = logsFiltrados.length || 1;
+    return [
+      { id: 'gratuito', nombre: 'Gratuito / A la gorra 🆓', valor: conteo.gratuito, color: 'bg-lime-500', barColor: '#84cc16', pct: Math.round((conteo.gratuito / total) * 100) },
+      { id: 'economico', nombre: 'Económico / Accesible 💳', valor: conteo.economico, color: 'bg-sky-500', barColor: '#0ea5e9', pct: Math.round((conteo.economico / total) * 100) },
+      { id: 'premium', nombre: 'Premium / Gala 💎', valor: conteo.premium, color: 'bg-rose-500', barColor: '#f43f5e', pct: Math.round((conteo.premium / total) * 100) },
+      { id: 'general', nombre: 'Sin filtro de precio 💵', valor: conteo.general, color: 'bg-slate-400', barColor: '#94a3b8', pct: Math.round((conteo.general / total) * 100) }
+    ].sort((a, b) => b.valor - a.valor);
   };
 
   // CSV Exporter for KNIME Analytics workflows
@@ -729,17 +1099,41 @@ export default function App() {
   };
 
   // Administration dashboard actions
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Supporting both real database authorization and developer fallback
-    if (adminEmail === 'admin@tangoba.com' && adminPassword === 'admin') {
+    try {
+      // Intentar login real en Supabase Auth
+      const user = await loginAdmin(adminEmail, adminPassword);
       setAdminLoggedIn(true);
       setAdminShowLoginModal(false);
-      triggerToast('Sesión de administrador iniciada correctamente', 'success');
+      setAdminPassword('');
+      triggerToast('Sesión de administrador iniciada con Supabase', 'success');
       loadAllAdminShows();
-    } else {
-      triggerToast('Credenciales incorrectas de administrador', 'error');
+    } catch (err: any) {
+      // Fallback para desarrollo local offline si las credenciales coinciden con las demo
+      if (adminEmail === 'admin@tangoba.com' && adminPassword === 'admin') {
+        setAdminLoggedIn(true);
+        setAdminShowLoginModal(false);
+        setAdminPassword('');
+        triggerToast('Sesión iniciada con credenciales demo (Local)', 'success');
+        loadAllAdminShows();
+      } else {
+        setAdminPassword('');
+        triggerToast(err.message || 'Credenciales incorrectas de administrador', 'error');
+      }
     }
+  };
+
+  const handleAdminLogout = async () => {
+    try {
+      await logoutAdmin();
+    } catch (err) {
+      console.warn('Error al cerrar sesión de Supabase:', err);
+    }
+    setAdminEmail('');
+    setAdminPassword('');
+    setAdminLoggedIn(false);
+    triggerToast('Sesión cerrada correctamente', 'info');
   };
 
   const loadAllAdminShows = async () => {
@@ -899,18 +1293,17 @@ export default function App() {
         <div className={`py-2 px-4 text-center text-xs md:text-sm font-medium border-b flex items-center justify-center gap-2 transition-all ${
           clima.esLluvia 
             ? 'bg-blue-100 border-blue-200 text-blue-900' 
-            : clima.esFrio 
+            : (clima.esFrio || !clima.esIdeal)
               ? 'bg-cyan-100 border-cyan-200 text-cyan-900'
-              : clima.esIdeal 
-                ? 'bg-emerald-100 border-emerald-200 text-emerald-900'
-                : 'bg-slate-100 border-slate-200 text-slate-700'
+              : 'bg-emerald-100 border-emerald-200 text-emerald-900'
         }`}>
-          <span>{clima.esLluvia ? '☔' : clima.esFrio ? '❄️' : '✨'}</span>
+          <span className="font-extrabold uppercase tracking-widest text-[10px] bg-black/5 px-1.5 py-0.5 rounded-md mr-1">Hoy</span>
+          <span>{clima.esLluvia ? '☔' : (clima.esFrio || !clima.esIdeal) ? '❄️' : '✨'}</span>
           <span>
             {clima.esLluvia 
               ? 'Atención: Lluvia detectada en Buenos Aires. Espectáculos al aire libre podrían reprogramarse.'
-              : clima.esFrio
-                ? `Frío intenso (${clima.temperatura}°C). Recomendamos milongas o salones techados.`
+              : (clima.esFrio || !clima.esIdeal)
+                ? `Temperatura fresca/fría (${clima.temperatura}°C). Recomendamos milongas o salones techados.`
                 : '¡Tiempo ideal para bailar! El clima está excelente para shows al aire libre.'
             }
           </span>
@@ -919,53 +1312,65 @@ export default function App() {
 
       {/* HEADER SECTION */}
       <header className="bg-gradient-to-r from-blue-900 to-blue-700 text-white shadow-md sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
           
           <div className="flex items-center gap-3">
             <span className="text-3xl filter drop-shadow">🎵</span>
-            <div>
-              <h1 className="text-2xl font-serif font-bold tracking-wider">TangoBA</h1>
-              <p className="text-xs text-blue-200 tracking-widest font-mono">Espectáculos · Buenos Aires</p>
+            <div className="flex flex-col items-center text-center">
+              <h1 className="text-2xl font-serif font-bold tracking-wider">Tango</h1>
+              <div className="text-xs text-blue-200 tracking-widest font-mono leading-tight mt-0.5">
+                <p>Espectáculos en</p>
+                <p>Buenos Aires</p>
+              </div>
             </div>
           </div>
 
+          {/* RETRO TANGO MUSIC PLAYER */}
+          <TangoPlayer />
+
           {/* Real-time Weather widget */}
           {clima ? (
-            <div className="bg-white/10 border border-white/20 rounded-xl p-2.5 flex items-center gap-3 text-xs w-full sm:w-auto max-w-sm justify-between">
+            <div className="bg-white/10 border border-white/20 rounded-xl p-2.5 flex items-center gap-3.5 text-xs w-full sm:w-auto max-w-sm justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">{clima.emoji}</span>
+                <span className="text-2.5xl">{clima.emoji}</span>
                 <div>
-                  <div className="font-bold text-slate-100 font-mono text-sm">{clima.temperatura}°C</div>
-                  <div className="text-slate-300 font-medium">{clima.condicion}</div>
+                  <div className="font-bold text-slate-100 font-mono text-sm flex items-center gap-1">
+                    {clima.temperatura}°C {clima.esFrio && <span className="animate-pulse" title="Frío intenso">❄️</span>}
+                  </div>
+                  <div className="text-slate-300 font-medium text-[10px]">{clima.condicion}</div>
                 </div>
               </div>
               <div className="border-l border-white/15 pl-3 text-[10px] text-slate-300 flex flex-col gap-0.5">
-                <span>💧 Humedad: {clima.humedad}%</span>
-                <span>💨 Viento: {clima.viento} km/h</span>
-                <span className="text-slate-200">📍 Buenos Aires</span>
+                <span className="capitalize text-white font-medium flex items-center gap-1">
+                  📅 {currentDateTime.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '')}
+                </span>
+                <span className="text-[9px] text-slate-300 flex items-center gap-1">
+                  🕒 {currentDateTime.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="text-slate-200 text-[9px]">📍 Buenos Aires (💧{clima.humedad}% | 💨{clima.viento}km/h)</span>
               </div>
             </div>
           ) : (
             <div className="text-xs text-blue-200 animate-pulse">Cargando clima actual...</div>
           )}
 
-          {/* Quick Stats & Admin Access */}
+          {/* Admin Access */}
           <div className="flex items-center gap-3 text-xs">
-            <div className="bg-blue-800/60 border border-blue-600/40 px-3 py-2 rounded-xl text-slate-100 flex items-center gap-1.5">
-              <i className="fa fa-chart-line text-blue-300"></i>
-              <span><b>{consultasCount}</b> búsquedas hoy</span>
-            </div>
 
             {adminLoggedIn ? (
               <button 
-                onClick={() => setAdminLoggedIn(false)}
-                className="bg-red-600/90 hover:bg-red-700 text-white font-bold px-3 py-2 rounded-xl transition-all shadow hover:shadow-md cursor-pointer flex items-center gap-1"
+                onClick={handleAdminLogout}
+                className="bg-amber-400 hover:bg-amber-500 text-white font-bold px-3 py-2 rounded-xl transition-all shadow hover:shadow-md cursor-pointer flex items-center gap-1"
               >
                 <i className="fa fa-sign-out-alt"></i> Salir
               </button>
             ) : (
               <button 
-                onClick={() => setAdminShowLoginModal(true)}
+                onClick={() => {
+                  setAdminEmail('');
+                  setAdminPassword('');
+                  setAdminShowLoginModal(true);
+                }}
                 className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium px-3 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1"
               >
                 <i className="fa fa-lock text-blue-300"></i> Admin
@@ -979,19 +1384,56 @@ export default function App() {
       {/* MAIN APPLICATION CONTAINER */}
       <main className="flex-1 max-w-7xl mx-auto px-4 py-6 w-full flex flex-col gap-6">
 
+        {/* HERO SECTION WITH BANDONEON */}
+        <section id="hero-bienvenida-bandoneon" className="h-[2.8cm] min-h-[2.8cm] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm overflow-hidden flex items-center">
+          {/* FOTO DEL BANDONEÓN (A LA IZQUIERDA) */}
+          <div id="contenedor-foto-bandoneon" className="w-[100px] sm:w-[150px] md:w-[210px] h-full relative bg-transparent shrink-0 border-r border-blue-100">
+            <img
+              id="foto-bandoneon-hero"
+              src="/src/assets/images/bandoneon_nuevo_1783224790253.jpg"
+              alt="Bandoneón Vintage Porteño"
+              referrerPolicy="no-referrer"
+              className="absolute inset-0 w-full h-full object-contain p-2"
+            />
+          </div>
+
+          {/* TEXTO DE BIENVENIDA (A LA DERECHA) */}
+          <div className="flex-1 px-4 py-2 flex flex-col justify-center h-full space-y-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span id="badge-bienvenida" className="text-sm md:text-base font-serif font-bold bg-blue-50 text-blue-900 px-3 py-0.5 rounded border border-blue-100 shrink-0 w-fit">
+                Bienvenidos al Compás de Buenos Aires
+              </span>
+            </div>
+            <p id="descripcion-bienvenida" className="text-xs sm:text-[13px] text-blue-700 leading-snug">
+              Explorá la cartelera de tango adaptada al clima de la ciudad.
+              <br />
+              Configurá los filtros manuales o utilizá el Buscador inteligente.
+            </p>
+          </div>
+        </section>
+
         {/* ADMIN DASHBOARD - ONLY VISIBLE TO LOGGED IN USERS */}
         {adminLoggedIn && (
-          <section className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 md:p-6 animation-fade-in border-t-4 border-t-amber-500">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-100 pb-4 mb-5 gap-4">
-              <div>
-                <h2 className="text-lg font-serif font-bold text-slate-800 flex items-center gap-2">
-                  <span className="p-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm">🔑</span>
+          <section className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-5 md:p-6 animation-fade-in border-t-4 border-t-amber-500">
+            <div className="border-b border-slate-100 pb-4 mb-5 space-y-4">
+              {/* Título Centrado */}
+              <div className="text-center w-full">
+                <h2 className="text-base md:text-lg font-serif font-bold text-slate-800 inline-flex items-center gap-2 justify-center">
+                  <span className="p-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs">🔑</span>
                   Panel del Administrador de Espectáculos
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">Agrega, edita y gestiona el listado completo de shows en el mapa público.</p>
               </div>
 
-              <div className="flex bg-slate-100 rounded-xl p-1 text-xs self-stretch md:self-auto">
+              {/* Subtítulo alineado a la izquierda y pestañas de navegación */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div className="text-left">
+                  <h3 className="text-sm md:text-base font-bold text-slate-800">
+                    Base de Datos de Espectáculos
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Agrega, edita y gestiona el listado completo de shows en el mapa público.</p>
+                </div>
+
+                <div className="flex bg-slate-100 rounded-xl p-1 text-xs self-stretch md:self-auto shrink-0">
                 <button
                   onClick={() => { setAdminTab('lista'); loadAllAdminShows(); }}
                   className={`flex-1 md:flex-initial py-2 px-4 rounded-lg font-semibold transition-all cursor-pointer ${adminTab === 'lista' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
@@ -1012,6 +1454,7 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
 
             {/* TAB: LIST OF EVENTS */}
             {adminTab === 'lista' && (
@@ -1364,24 +1807,44 @@ export default function App() {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Nueva Contraseña</label>
-                    <input
-                      type="password"
-                      placeholder="Mínimo 5 caracteres"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:border-blue-500"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Mínimo 5 caracteres"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        className="w-full text-xs p-2.5 pr-10 rounded-xl border border-slate-200 outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer"
+                        title={showNewPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                      >
+                        <i className={`fa ${showNewPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                      </button>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Confirmar Nueva Contraseña</label>
-                    <input
-                      type="password"
-                      placeholder="Repita la contraseña"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:border-blue-500"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Repita la contraseña"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        className="w-full text-xs p-2.5 pr-10 rounded-xl border border-slate-200 outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer"
+                        title={showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                      >
+                        <i className={`fa ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1397,31 +1860,386 @@ export default function App() {
           </section>
         )}
 
+        {/* KNIME INTEGRATION drawer */}
+        {adminLoggedIn && (
+          <>
+            <section className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm overflow-hidden">
+              <button
+              onClick={handleOpenAnalytics}
+              className="w-full text-left bg-blue-100/30 hover:bg-blue-100/50 border-none px-5 py-4 flex items-center justify-between transition-colors outline-none cursor-pointer"
+            >
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">📊</span>
+              <div>
+                <h3 className="text-sm text-slate-800">
+                  <span className="text-base font-bold">Panel</span> <span className="font-normal">con detalle de datos en base a consultas de usuarios</span>
+                </h3>
+                <p className="text-sm font-bold text-slate-600 mt-0.5">
+                  e información destinada a emplear en KNIME. <span className="text-xs font-bold text-slate-500">(Configuración y archivo a exportar)</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <span className="text-[13px] font-bold text-blue-600 text-right hidden sm:inline">
+                {analyticsOpen 
+                  ? "Hacer click para cerrar el panel y actualizar con los nuevos datos" 
+                  : "Hacer click para desplegar información y gráficos"}
+              </span>
+              <i className={`fa fa-chevron-down text-blue-600 text-xs transition-transform duration-300 ${analyticsOpen ? 'rotate-180' : ''}`}></i>
+            </div>
+          </button>
+
+          {analyticsOpen && (
+            <div className="p-5 md:p-6 border-t border-slate-100 space-y-6 animate-fade-in">
+              
+              {/* Selector de Rango de Fechas */}
+              <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row items-end justify-between gap-4">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    <div className="space-y-1.5 text-left">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        📅 Fecha de Inicio
+                      </label>
+                      <input 
+                        type="date" 
+                        value={fechaDesde} 
+                        onChange={(e) => setFechaDesde(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                      />
+                    </div>
+                    <div className="space-y-1.5 text-left">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        📅 Fecha de Fin
+                      </label>
+                      <input 
+                        type="date" 
+                        value={fechaHasta} 
+                        onChange={(e) => setFechaHasta(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2 w-full md:w-auto">
+                    <button 
+                      onClick={() => {
+                        setFechaDesde('');
+                        setFechaHasta('');
+                      }}
+                      disabled={!fechaDesde && !fechaHasta}
+                      className="flex-1 md:flex-none border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white text-blue-600 text-xs font-extrabold py-2.5 px-4 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      Limpiar Rango
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Computed metrics */}
+              <div className="flex justify-center w-full">
+                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center max-w-sm w-full">
+                  <div className="font-serif font-bold text-2xl text-blue-700">
+                    {getLogsFiltrados().length}
+                  </div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">
+                    {fechaDesde || fechaHasta ? 'Consultas en Rango' : 'Consultas Totales (Muestra)'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Gráficos Analíticos de Consultas para KNIME */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 bg-white p-5 border border-slate-100 rounded-2xl shadow-sm">
+                
+                {/* 1. Distribución de Tipos de Shows Pedidos */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      💃 Tipos de Shows Pedidos
+                    </h4>
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">
+                      Preferencia de Espectadores
+                    </span>
+                  </div>
+
+                  {getLogsFiltrados().length === 0 ? (
+                    <div className="h-40 flex items-center justify-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <p className="text-xs text-slate-400">Sin datos de consultas en este rango.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 pt-1">
+                      {agruparPorTipoShow().map((show) => (
+                        <div key={show.id} className="space-y-1 group">
+                          <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+                            <span>{show.nombre}</span>
+                            <span className="text-slate-500 font-sans font-medium">
+                              {show.valor} ({show.pct}%)
+                            </span>
+                          </div>
+                          
+                          {/* Barra de progreso */}
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden relative">
+                            <div 
+                              className={`h-full ${show.color} rounded-full transition-all duration-1000 ease-out`} 
+                              style={{ width: `${show.pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Distribución por Horario */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      🕒 Horarios Solicitados
+                    </h4>
+                    <span className="text-[10px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full font-semibold">
+                      Preferencia Horaria
+                    </span>
+                  </div>
+
+                  {getLogsFiltrados().length === 0 ? (
+                    <div className="h-40 flex items-center justify-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <p className="text-xs text-slate-400">Sin datos de consultas en este rango.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 pt-1">
+                      {agruparPorHorario().map((item) => (
+                        <div key={item.id} className="space-y-1">
+                          <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+                            <span>{item.nombre}</span>
+                            <span className="text-slate-500 font-sans font-medium">
+                              {item.valor} ({item.pct}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`} 
+                              style={{ width: `${item.pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Distribución por Ambiente */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      🌳 Climatización y Espacios
+                    </h4>
+                    <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-semibold">
+                      Tipo de Ambiente
+                    </span>
+                  </div>
+
+                  {getLogsFiltrados().length === 0 ? (
+                    <div className="h-40 flex items-center justify-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <p className="text-xs text-slate-400">Sin datos de consultas en este rango.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 pt-1">
+                      {agruparPorAmbiente().map((item) => (
+                        <div key={item.id} className="space-y-1">
+                          <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+                            <span>{item.nombre}</span>
+                            <span className="text-slate-500 font-sans font-medium">
+                              {item.valor} ({item.pct}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`} 
+                              style={{ width: `${item.pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Distribución por Presupuesto */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      💵 Presupuestos Elegidos
+                    </h4>
+                    <span className="text-[10px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-semibold">
+                      Rango de Precios
+                    </span>
+                  </div>
+
+                  {getLogsFiltrados().length === 0 ? (
+                    <div className="h-40 flex items-center justify-center bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                      <p className="text-xs text-slate-400">Sin datos de consultas en este rango.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3.5 pt-1">
+                      {agruparPorPrecio().map((item) => (
+                        <div key={item.id} className="space-y-1">
+                          <div className="flex justify-between text-[11px] font-semibold text-slate-700">
+                            <span>{item.nombre}</span>
+                            <span className="text-slate-500 font-sans font-medium">
+                              {item.valor} ({item.pct}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full ${item.color} rounded-full transition-all duration-1000 ease-out`} 
+                              style={{ width: `${item.pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* CSV & API integration trigger keys */}
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 border border-blue-100 rounded-xl">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-blue-600">Flujo de Trabajo para KNIME</h4>
+                  <p className="text-[11px] text-slate-500">Usa el nodo <b>HTTP Request</b> apuntando al API REST de Supabase, o descarga el reporte diario en formato CSV.</p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleExportCSV}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-xl flex items-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer"
+                  >
+                    <i className="fa fa-download"></i> Exportar CSV
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      // Toggle raw visual viewer
+                      const dialog = document.getElementById('api-credentials-guide');
+                      if (dialog) dialog.style.display = dialog.style.display === 'none' ? 'block' : 'none';
+                    }}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold py-2 px-4 rounded-xl transition-all cursor-pointer"
+                  >
+                    <i className="fa fa-code"></i> Ver credenciales de API
+                  </button>
+                </div>
+              </div>
+
+              {/* Raw JSON raw endpoint credentials guide box */}
+              <div id="api-credentials-guide" style={{ display: 'none' }} className="p-4 bg-slate-900 text-slate-300 rounded-xl text-xs font-mono space-y-3">
+                <div className="flex justify-between items-center text-amber-400 border-b border-slate-800 pb-2">
+                  <span>🔗 Configuración de nodos KNIME</span>
+                  <button onClick={() => {
+                    const el = document.getElementById('api-credentials-guide');
+                    if (el) el.style.display = 'none';
+                  }} className="text-white hover:text-red-400 font-bold">×</button>
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="text-slate-500 font-semibold uppercase text-[10px] tracking-wider text-amber-500/80">URL Endpoint (GET):</div>
+                  <div className="bg-black/40 p-2 rounded text-slate-200 break-all">https://kwhllwbpdvgwyosgerqb.supabase.co/rest/v1/consultas_log?select=*&order=fecha.desc</div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-slate-500 font-semibold uppercase text-[10px] tracking-wider text-amber-500/80">Headers HTTP requeridos:</div>
+                  <pre className="bg-black/40 p-2 rounded text-slate-200 overflow-x-auto">
+{`apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Anon Key)
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json`}
+                  </pre>
+                </div>
+              </div>
+
+            </div>
+          )}
+        </section>
+
+        {/* Divisor elegante para separar la sección de analíticas de la sección pública de búsqueda */}
+        <div className="flex items-center gap-4 pt-4 pb-0 mt-6 mb-[-14px] animate-fade-in">
+          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-blue-200 to-transparent"></div>
+          <span className="text-[11px] sm:text-xs font-extrabold text-blue-600 uppercase tracking-widest bg-white px-8 py-3 rounded-full border-2 border-blue-200/80 shadow-sm select-none flex items-center gap-2">
+            🔍 Buscador Público de Espectáculos de Tango en Buenos Aires
+          </span>
+          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-blue-200 to-transparent"></div>
+        </div>
+      </>
+    )}
+
         {/* AI SEARCH PANEL */}
-        <section className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-5 md:p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex-1 space-y-2">
-            <h2 className="text-lg font-serif font-bold text-blue-900 flex items-center gap-2">
-              <span className="p-1 bg-blue-100 text-blue-700 rounded-lg text-sm">🤖</span>
+        <section className="md:h-[2.2cm] md:min-h-[2.2cm] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-4 md:py-2 md:px-6 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
+          <div className="flex-1 space-y-1">
+            <h2 className="text-sm md:text-base font-serif font-bold text-blue-900 flex items-center gap-2">
+              <span className="p-1 bg-blue-100 text-blue-700 rounded-lg inline-flex items-center justify-center shadow-xs shrink-0">
+                <svg 
+                  className="w-4.5 h-4.5 text-blue-700" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="1.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                >
+                  {/* Left wooden handle/body */}
+                  <rect x="2" y="5" width="4" height="14" rx="1" fill="currentColor" fillOpacity="0.2" />
+                  {/* Left Panel Keys */}
+                  <circle cx="3.5" cy="8" r="0.6" fill="currentColor" />
+                  <circle cx="4.5" cy="10" r="0.6" fill="currentColor" />
+                  <circle cx="3.5" cy="12" r="0.6" fill="currentColor" />
+                  <circle cx="4.5" cy="14" r="0.6" fill="currentColor" />
+                  <circle cx="3.5" cy="16" r="0.6" fill="currentColor" />
+
+                  {/* Bellows (fuelle) zigzags */}
+                  <path 
+                    d="M6 5 L8 4 L10 5 L12 4 L14 5 L16 4 L18 5 M6 19 L8 20 L10 19 L12 20 L14 19 L16 20 L18 19" 
+                    stroke="currentColor" 
+                    strokeWidth="1.5" 
+                  />
+                  {/* Inner vertical folds of the bellows */}
+                  <line x1="8" y1="4" x2="8" y2="20" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="10" y1="5" x2="10" y2="19" stroke="currentColor" strokeWidth="1" opacity="0.7" />
+                  <line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="14" y1="5" x2="14" y2="19" stroke="currentColor" strokeWidth="1" opacity="0.7" />
+                  <line x1="16" y1="4" x2="16" y2="20" stroke="currentColor" strokeWidth="1.5" />
+
+                  {/* Right wooden handle/body */}
+                  <rect x="18" y="5" width="4" height="14" rx="1" fill="currentColor" fillOpacity="0.2" />
+                  {/* Right Panel Keys */}
+                  <circle cx="20.5" cy="8" r="0.6" fill="currentColor" />
+                  <circle cx="19.5" cy="10" r="0.6" fill="currentColor" />
+                  <circle cx="20.5" cy="12" r="0.6" fill="currentColor" />
+                  <circle cx="19.5" cy="14" r="0.6" fill="currentColor" />
+                  <circle cx="20.5" cy="16" r="0.6" fill="currentColor" />
+
+                  {/* Straps/Handles */}
+                  <path d="M2 9 C 0.5 10, 0.5 14, 2 15" stroke="currentColor" strokeWidth="1" fill="none" />
+                  <path d="M22 9 C 23.5 10, 23.5 14, 22 15" stroke="currentColor" strokeWidth="1" fill="none" />
+                </svg>
+              </span>
               Buscador de Tango con Inteligencia Artificial
             </h2>
-            <p className="text-xs text-blue-700 leading-relaxed max-w-2xl">
-              ¡Escribe en lenguaje natural! Puedes pedir cosas como <i>"milongas gratis este domingo"</i>, <i>"shows premium al aire libre"</i> o <i>"algo cantado para hoy a la noche"</i>. Gemini configurará los filtros automáticamente.
+            <p className="text-xs sm:text-[12.5px] text-blue-700 leading-snug max-w-2xl">
+              <span className="font-extrabold text-blue-900 block sm:inline mr-1">Solo puedes pedir</span> cosas como <i>"milongas gratis este domingo"</i>, <i>"shows premium al aire libre"</i> o <i>"algo cantado para hoy a la noche"</i>. Gemini configurará los filtros automáticamente.
             </p>
           </div>
 
           <form onSubmit={handleAISearch} className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="flex bg-white border border-blue-200 rounded-2xl p-1 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            <div className="flex bg-white border border-blue-200 rounded-2xl p-0.5 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
               <input
                 type="text"
                 placeholder="Escribe tu búsqueda aquí..."
                 value={aiQuery}
                 onChange={e => setAiQuery(e.target.value)}
-                className="flex-1 px-3 py-2 text-xs md:text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                className="flex-1 px-3 py-1.5 text-xs md:text-sm text-slate-800 outline-none placeholder:text-slate-400 bg-transparent"
               />
               <button
                 type="submit"
                 disabled={aiLoading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-xs px-4 md:px-5 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-[10px] md:text-xs px-3 md:px-4 py-1.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
               >
                 {aiLoading ? (
                   <>
@@ -1449,8 +2267,8 @@ export default function App() {
         )}
 
         {/* MANUAL FILTERS COLUMN CONTAINER */}
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 md:p-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+        <section className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm p-5 md:p-6">
+          <div className="flex items-center justify-between border-b border-blue-200 pb-4 mb-5">
             <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-2">
               <i className="fa fa-sliders-h text-blue-600"></i>
               Filtros de Búsqueda Manuales
@@ -1475,14 +2293,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('tipo', '')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${filters.tipo === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${tempFilters.tipo === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   Todos
                 </button>
                 <button
                   type="button"
                   onClick={() => selectFilter('tipo', 'baile')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.tipo === 'baile' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.tipo === 'baile' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Solo Baile / Milonga</span>
                   <span>💃</span>
@@ -1490,7 +2308,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('tipo', 'cantado')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.tipo === 'cantado' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.tipo === 'cantado' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Cantado / Orquesta</span>
                   <span>🎤</span>
@@ -1498,7 +2316,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('tipo', 'show_completo')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.tipo === 'show_completo' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.tipo === 'show_completo' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Show Completo</span>
                   <span>🎭</span>
@@ -1515,14 +2333,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('precio', '')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${filters.precio === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${tempFilters.precio === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   Todos
                 </button>
                 <button
                   type="button"
                   onClick={() => selectFilter('precio', 'gratuito')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.precio === 'gratuito' ? 'bg-emerald-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.precio === 'gratuito' ? 'bg-emerald-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Gratuito / Sin Costo</span>
                   <span className="text-emerald-500 font-bold">●</span>
@@ -1530,7 +2348,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('precio', 'economico')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.precio === 'economico' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.precio === 'economico' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Económico</span>
                   <span className="text-blue-500 font-bold">●</span>
@@ -1538,7 +2356,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('precio', 'premium')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.precio === 'premium' ? 'bg-amber-500 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.precio === 'premium' ? 'bg-amber-500 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Premium / Cena Show</span>
                   <span className="text-amber-500 font-bold">●</span>
@@ -1555,14 +2373,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('ambiente', '')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${filters.ambiente === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${tempFilters.ambiente === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   Todos
                 </button>
                 <button
                   type="button"
                   onClick={() => selectFilter('ambiente', 'aire_libre')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.ambiente === 'aire_libre' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.ambiente === 'aire_libre' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Al Aire Libre</span>
                   <span>☀️</span>
@@ -1570,7 +2388,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('ambiente', 'techado')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.ambiente === 'techado' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.ambiente === 'techado' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Techado / Salón</span>
                   <span>🏛️</span>
@@ -1587,14 +2405,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('horario', '')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${filters.horario === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all ${tempFilters.horario === '' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   Todos
                 </button>
                 <button
                   type="button"
                   onClick={() => selectFilter('horario', 'vespertino')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.horario === 'vespertino' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.horario === 'vespertino' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Vespertino (Tarde)</span>
                   <span>🌅</span>
@@ -1602,7 +2420,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => selectFilter('horario', 'nocturno')}
-                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${filters.horario === 'nocturno' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
+                  className={`text-left text-xs py-1.5 px-3 rounded-lg transition-all flex items-center justify-between ${tempFilters.horario === 'nocturno' ? 'bg-blue-600 text-white font-semibold' : 'bg-slate-50 hover:bg-slate-100 text-slate-700'}`}
                 >
                   <span>Nocturno (Noche)</span>
                   <span>🌙</span>
@@ -1615,7 +2433,7 @@ export default function App() {
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
                 <span>📅</span> Fechas
               </label>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-2">
+              <div className="bg-white/80 backdrop-blur-xs border border-blue-100 rounded-xl p-2.5 space-y-2">
                 
                 {/* Calendar month switcher */}
                 <div className="flex justify-between items-center text-[10px] font-bold text-blue-900 border-b border-slate-200/60 pb-1.5">
@@ -1643,30 +2461,94 @@ export default function App() {
 
           </div>
 
-          {/* Render active calendar date tags */}
-          {calSelectedDates.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 mt-4 pt-3 border-t border-slate-100 text-xs">
-              <span className="text-slate-500">Fechas seleccionadas:</span>
-              {calSelectedDates.sort().map(d => {
-                const [year, month, day] = d.split('-').map(Number);
-                const dateObj = new Date(year, month - 1, day);
-                const dayLabel = DIAS_SEMANA_ESP[dateObj.getDay()].label;
-                return (
-                  <span key={d} className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-2 py-0.5 font-semibold flex items-center gap-1">
-                    {day}/{month} ({dayLabel})
-                    <button type="button" onClick={() => toggleCalendarDate(d)} className="text-[10px] text-red-500 font-bold hover:text-red-700">×</button>
-                  </span>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setCalSelectedDates([])}
-                className="text-[10px] text-red-600 hover:underline font-bold"
-              >
-                Limpiar fechas
-              </button>
+          {/* Render active calendar date tags and weather forecast */}
+          {tempCalSelectedDates.length > 0 && (
+            <div className="space-y-3 mt-4 pt-3 border-t border-slate-100">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-slate-500">Fechas seleccionadas:</span>
+                {tempCalSelectedDates.sort().map(d => {
+                  const [year, month, day] = d.split('-').map(Number);
+                  const dateObj = new Date(year, month - 1, day);
+                  const dayLabel = DIAS_SEMANA_ESP[dateObj.getDay()].label;
+                  return (
+                    <span key={d} className="bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-2 py-0.5 font-semibold flex items-center gap-1">
+                      {day}/{month} ({dayLabel})
+                      <button type="button" onClick={() => toggleCalendarDate(d)} className="text-[10px] text-red-500 font-bold hover:text-red-700">×</button>
+                    </span>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setTempCalSelectedDates([])}
+                  className="text-[10px] text-blue-600 hover:underline font-bold"
+                >
+                  Limpiar fechas
+                </button>
+              </div>
+
+              {/* Weather forecast section for selected dates */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <span>⛅</span>
+                  <span>Pronóstico para las fechas seleccionadas:</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                  {tempCalSelectedDates.sort().map(d => {
+                    const fCast = forecast.find(f => f.fecha === d);
+                    const [year, month, day] = d.split('-').map(Number);
+                    const dateObj = new Date(year, month - 1, day);
+                    const dayLabel = DIAS_SEMANA_ESP[dateObj.getDay()].label;
+                    
+                    if (fCast) {
+                      return (
+                        <div key={d} className="bg-white/80 backdrop-blur-xs border border-blue-100/60 rounded-lg p-2 flex items-center justify-between gap-2 shadow-xs hover:shadow-sm transition-all">
+                          <div className="space-y-0.5">
+                            <div className="text-[11px] font-bold text-slate-700">{day}/{month} ({dayLabel})</div>
+                            <div className="text-[10px] text-slate-500 capitalize">{fCast.condicion}</div>
+                            {fCast.probabilidadPrecipitacion > 0 && (
+                              <div className="text-[9px] text-blue-600 font-medium flex items-center gap-0.5">
+                                <span>💧</span> {fCast.probabilidadPrecipitacion}% lluvia
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right flex items-center gap-1.5">
+                            <span className="text-lg">{fCast.emoji}</span>
+                            <div className="text-right">
+                              <div className="text-xs font-bold text-slate-800">{fCast.temperaturaMax}°C</div>
+                              <div className="text-[9px] text-slate-500">{fCast.temperaturaMin}°C</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div key={d} className="bg-slate-100/70 border border-slate-200/50 rounded-lg p-2 flex items-center justify-between gap-1.5">
+                          <div className="text-[11px] font-medium text-slate-600">
+                            <strong>{day}/{month}</strong>: Sin pronóstico activo (solo próx. 14 días)
+                          </div>
+                          <span className="text-xs">⏳</span>
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Accept Button Row */}
+          <div className="flex flex-col items-center justify-center gap-1.5 mt-1 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={applyManualFilters}
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-8 py-2.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer hover:shadow-lg transform active:scale-95"
+            >
+              <i className="fa fa-check-circle"></i> Aceptar
+            </button>
+            <p className="text-[13px] font-bold text-blue-600 text-center max-w-md">
+              Personalizá tus filtros manuales arriba y presioná <strong>Aceptar</strong> para actualizar la cartelera.
+            </p>
+          </div>
         </section>
 
         {/* RESULTS & MAP LAYOUT SPLIT */}
@@ -1842,16 +2724,16 @@ export default function App() {
           {/* RIGHT: INTERACTIVE MAP CONTAINER */}
           <aside className="lg:col-span-4 lg:sticky lg:top-24 space-y-4">
             
-            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-              <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl overflow-hidden shadow-sm">
+              <div className="bg-blue-100/40 border-b border-blue-100 px-4 py-3 flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                   <i className="fa fa-map-marked-alt text-blue-600"></i>
-                  Mapa de Venues
+                  Mapa
                 </h3>
 
                 <button
                   onClick={handleCenterOnUser}
-                  className="text-[10px] bg-white border border-slate-200 text-slate-600 hover:text-blue-600 py-1 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                  className="text-[10px] bg-white border border-blue-100 text-slate-600 hover:text-blue-600 py-1 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
                   title="Centrar en mi ubicación actual"
                 >
                   <i className="fa fa-crosshairs text-blue-500"></i> Mi Ubicación
@@ -1864,7 +2746,7 @@ export default function App() {
                 className="h-[430px] w-full bg-slate-100"
               ></div>
 
-              <div className="p-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-500 flex items-center justify-around">
+              <div className="p-3 bg-blue-100/40 border-t border-blue-100 text-[10px] text-slate-500 flex items-center justify-around">
                 <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Gratis</div>
                 <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> Económico</div>
                 <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Premium</div>
@@ -1875,121 +2757,21 @@ export default function App() {
 
         </div>
 
-        {/* KNIME INTEGRATION drawer */}
-        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <button
-            onClick={handleOpenAnalytics}
-            className="w-full text-left bg-slate-50 hover:bg-slate-100/70 border-none px-5 py-4 flex items-center justify-between transition-colors outline-none cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl">📊</span>
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">Panel de Analytics para KNIME</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Analiza métricas de consultas de usuarios e integra flujos de datos externos en KNIME.</p>
-              </div>
-            </div>
-            <i className={`fa fa-chevron-down text-slate-400 text-xs transition-transform duration-300 ${analyticsOpen ? 'rotate-180' : ''}`}></i>
-          </button>
-
-          {analyticsOpen && (
-            <div className="p-5 md:p-6 border-t border-slate-100 space-y-6 animate-fade-in">
-              
-              {/* Computed metrics */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
-                  <div className="font-serif font-bold text-2xl text-blue-700">{consultasCount}</div>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Consultas Hoy</div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
-                  <div className="font-serif font-bold text-sm text-blue-700 truncate capitalize">{computeMostUsedFilter()}</div>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Filtro más usado</div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
-                  <div className="font-serif font-bold text-2xl text-blue-700">
-                    {rawLogs.filter(l => l.uso_gemini).length}
-                  </div>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Búsquedas por IA</div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-center">
-                  <div className="font-serif font-bold text-sm text-blue-700">
-                    {clima ? `${clima.temperatura}°C ${clima.emoji}` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Clima actual</div>
-                </div>
-              </div>
-
-              {/* CSV & API integration trigger keys */}
-              <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-50 p-4 border border-slate-200/60 rounded-xl">
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-slate-700">Flujos de Trabajo de KNIME</h4>
-                  <p className="text-[11px] text-slate-500">Usa el nodo <b>HTTP Request</b> apuntando al API REST de Supabase, o descarga el reporte diario en formato CSV.</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleExportCSV}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-xl flex items-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer"
-                  >
-                    <i className="fa fa-download"></i> Exportar CSV
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      // Toggle raw visual viewer
-                      const dialog = document.getElementById('api-credentials-guide');
-                      if (dialog) dialog.style.display = dialog.style.display === 'none' ? 'block' : 'none';
-                    }}
-                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold py-2 px-4 rounded-xl transition-all cursor-pointer"
-                  >
-                    <i className="fa fa-code"></i> Ver credenciales de API
-                  </button>
-                </div>
-              </div>
-
-              {/* Raw JSON raw endpoint credentials guide box */}
-              <div id="api-credentials-guide" style={{ display: 'none' }} className="p-4 bg-slate-900 text-slate-300 rounded-xl text-xs font-mono space-y-3">
-                <div className="flex justify-between items-center text-amber-400 border-b border-slate-800 pb-2">
-                  <span>🔗 Configuración de nodos KNIME</span>
-                  <button onClick={() => {
-                    const el = document.getElementById('api-credentials-guide');
-                    if (el) el.style.display = 'none';
-                  }} className="text-white hover:text-red-400 font-bold">×</button>
-                </div>
-                
-                <div className="space-y-1">
-                  <div className="text-slate-500 font-semibold uppercase text-[10px] tracking-wider text-amber-500/80">URL Endpoint (GET):</div>
-                  <div className="bg-black/40 p-2 rounded text-slate-200 break-all">https://kwhllwbpdvgwyosgerqb.supabase.co/rest/v1/consultas_log?select=*&order=fecha.desc</div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="text-slate-500 font-semibold uppercase text-[10px] tracking-wider text-amber-500/80">Headers HTTP requeridos:</div>
-                  <pre className="bg-black/40 p-2 rounded text-slate-200 overflow-x-auto">
-{`apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Anon Key)
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-Content-Type: application/json`}
-                  </pre>
-                </div>
-              </div>
-
-            </div>
-          )}
-        </section>
-
       </main>
 
       {/* FOOTER */}
       <footer className="bg-white border-t border-slate-200 py-8 text-center text-slate-500 text-xs">
         <div className="max-w-7xl mx-auto px-4 space-y-2">
-          <p className="font-serif font-bold text-slate-700 text-sm">🎵 TangoBA · Buenos Aires</p>
+          <p className="font-serif font-bold text-slate-700 text-base">🎵 Tango · Buenos Aires</p>
           <p className="text-slate-400">Plataforma inteligente de recomendación artística potenciada por Gemini 3.5 Flash y Supabase.</p>
-          <p className="text-[10px] text-slate-400 pt-2 border-t border-slate-100 max-w-md mx-auto">© 2026 TangoBA. Desarrollado con esmero para los amantes del tango porteño. Licencia MIT.</p>
+          <p className="text-[10px] text-slate-400 pt-2 border-t border-slate-100 max-w-md mx-auto">© 2026 Tango. Desarrollado con esmero para los amantes del tango porteño. Licencia MIT.</p>
         </div>
       </footer>
 
       {/* DETAILED SHOW POPUP MODAL */}
       {selectedShow && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl relative animate-scale-up">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl relative animate-scale-up">
             
             {/* Close button */}
             <button
@@ -2144,7 +2926,7 @@ Content-Type: application/json`}
       {/* LOGIN MODAL */}
       {adminShowLoginModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
             
             <button
               onClick={() => setAdminShowLoginModal(false)}
@@ -2156,7 +2938,7 @@ Content-Type: application/json`}
             <div className="text-center space-y-2 mb-6">
               <span className="text-3xl">🔐</span>
               <h3 className="font-serif font-bold text-lg text-slate-800">Acceso de Administrador</h3>
-              <p className="text-xs text-slate-500">Inicia sesión para cargar y mantener los espectáculos de TangoBA.</p>
+              <p className="text-xs text-slate-500">Inicia sesión para cargar y mantener los espectáculos de Tango.</p>
             </div>
 
             <form onSubmit={handleAdminLogin} className="space-y-4">
@@ -2165,28 +2947,35 @@ Content-Type: application/json`}
                 <input
                   type="email"
                   required
-                  placeholder="admin@tangoba.com"
+                  placeholder="admin@correo.com"
                   value={adminEmail}
                   onChange={e => setAdminEmail(e.target.value)}
                   className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-mono"
+                  autoComplete="username"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Contraseña</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={adminPassword}
-                  onChange={e => setAdminPassword(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="p-3 bg-blue-50 text-blue-800 text-[10px] rounded-xl leading-relaxed flex items-start gap-1.5">
-                <i className="fa fa-info-circle text-blue-500 shrink-0 mt-0.5"></i>
-                <span><b>Modo Desarrollador Activo:</b> Puedes usar el email <b>admin@tangoba.com</b> y la contraseña <b>admin</b> como credenciales para probar todo el flujo.</span>
+                <div className="relative">
+                  <input
+                    type={showAdminPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={adminPassword}
+                    onChange={e => setAdminPassword(e.target.value)}
+                    className="w-full text-xs p-2.5 pr-10 rounded-xl border border-slate-200 outline-none focus:border-blue-500"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer"
+                    title={showAdminPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  >
+                    <i className={`fa ${showAdminPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                  </button>
+                </div>
               </div>
 
               <button

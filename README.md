@@ -1,12 +1,51 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# 🎵 Tango — Buscador de Espectáculos en Buenos Aires
 
-# TGO - Buscador y Localizador de Espectáculos de Tango en Buenos Aires
-## Manual Técnico, de Arquitectura, Operación y Despliegue de la Plataforma
+
+Bienvenido a la aplicación web gratuita que permite buscar y descubrir espectáculos de tango en la Ciudad de Buenos Aires.
+> **Encontrá el show de tango perfecto en Buenos Aires.**
+> Filtrá por tipo, precio, horario y clima en tiempo real.
+> Desarrollado 100% con asistencia de Inteligencia Artificial.  Claude Sonnet 4.6 y Gemini 3.5 Flash.
+
+Combina tres tecnologías clave para ofrecer una experiencia única e inteligente:
+
+```
+🤖 Inteligencia Artificial  →  Búsqueda en lenguaje natural
+🌤️ Clima en tiempo real     →  Recomendaciones según el tiempo
+🗺️ Geolocalización          →  Mapa interactivo 
+```
 ---
 
-Bienvenido al repositorio oficial de **TangoBA**, el buscador e itinerario interactivo definitivo para espectáculos de tango en la Ciudad Autónoma de Buenos Aires. Esta documentación detallada abarca desde la justificación cultural de la plataforma hasta su intrincada arquitectura de software, incluyendo el análisis de código, el flujo de datos, la integración de APIs en tiempo real, las políticas de seguridad y la gestión de bases de datos.
+### ¿Para quién esta destinado?
+
+| Perfil | Beneficio |
+|---|---|
+| Turista en BA | Descubrí los mejores shows sin perderte nada |
+| Bailarín local | Encontrá milongas por barrio, día y precio |
+| Amante del tango | Seguí la agenda completa de orquestas y cantantes |
+| Analista de datos | Exportá métricas de uso para análisis en KNIME 
+
+
+
+
+
+
+---
+
+## 🌐 Demo y Accesos
+
+| Enlace | Descripción |
+|---|---|
+| 🌍 [Ver aplicación](https://tango-buscador.vercel.app) | Sitio público |
+| 🔐 [Panel Admin](https://tango-buscador.vercel.app/login.html) | Gestión de espectáculos |
+| 🐙 [Repositorio](https://github.com/fceia2026-arch/TangoBuscador) | Código fuente |
+
+---
+### Denominaremos este Buscador como TangoBA o Buscador Tanguero, indistintamente.
+
+---
+
+## Manual Técnico, de Arquitectura, Operación y Despliegue de la Plataforma
+
 
 ---
 
@@ -26,15 +65,14 @@ Bienvenido al repositorio oficial de **TangoBA**, el buscador e itinerario inter
 
 ## 1. Introducción y Propósito del Proyecto
 
-El tango no es solo un género musical y una danza; es el patrimonio vivo que define la identidad cultural de Buenos Aires, declarado **Patrimonio Cultural Inmaterial de la Humanidad por la UNESCO**. En una metrópolis que late al ritmo del dos por cuatro, la oferta de espectáculos, milongas, peñas y shows cantados es abrumadora y dinámica.
-
-**TangoBA** nace con el objetivo de unificar, geolocalizar y contextualizar esta rica oferta cultural. La plataforma no es un simple directorio estático. Se concibe como una herramienta inteligente que ayuda tanto al turista internacional como al vecino porteño a descubrir espectáculos en base a:
-- Sus preferencias estéticas (baile, canto o show integral de escenario).
+Este Buscador Tanguero nace con el objetivo de unificar, geolocalizar y contextualizar esta rica oferta cultural. La plataforma no es un simple directorio estático. Se concibe como una herramienta inteligente que ayuda tanto al turista internacional como al vecino porteño a descubrir espectáculos en base a:
+- Sus preferencias (baile, canto o show integral de escenario).
 - Su presupuesto (desde propuestas gratuitas de calle o centros culturales estatales hasta cenas show de alta gama).
 - Su disponibilidad horaria y de calendario (días de la semana, horarios vespertinos o nocturnos).
-- **Las condiciones climáticas en tiempo real:** Factor crítico en una ciudad con fuerte actividad de tango callejero y milongas al aire libre (como la Glorieta de Belgrano o plazas de San Telmo).
+- Las condiciones climáticas en tiempo real: Factor crítico en una ciudad con fuerte actividad de tango callejero y milongas al aire libre (como la Glorieta de Belgrano o plazas de San Telmo).
+- Mientras se realiza la busqueda se puede activar el reproductor de sonido para ir oyendo de fondo el tango La Cumparsita.
 
-Con esta propuesta, TangoBA une la tradición porteña con la ingeniería de software moderna, entregando una interfaz de usuario fluida, interactiva y de alto impacto visual.
+Con esta propuesta, el Buscador TangoBA une la tradición porteña con la ingeniería de software moderna, entregando una interfaz de usuario fluida, interactiva y de alto impacto visual.
 
 ---
 
@@ -59,8 +97,8 @@ TangoBA está construido bajo un enfoque de desarrollo ágil y de alta fidelidad
 
 ### 2.1. Frontend Core
 - **React 18**: Biblioteca principal para la creación de componentes declarativos, manejando un estado central robusto y ciclos de vida óptimos de renderizado.
-- **Vite**: Herramienta de compilación ultrarrápida (Bundler) para el desarrollo moderno en entornos web front-end, que maximiza el rendimiento gracias al pre-empaquetado con Esbuild.
-- **Tailwind CSS (V4)**: Motor de diseño utilitario para estructurar una interfaz limpia, adaptada a dispositivos móviles y pantallas de escritorio. Utiliza un esquema visual de alto contraste con tonos oscuros de fondo (slate-900), acompañados de tipografías elegantes (serifas en encabezados para evocar el ambiente bohemio de los bodegones de tango y sans-serif legibles para controles y metadatos).
+- **Vite**: Herramienta de compilación ultrarrápida (Bundler) para el desarrollo moderno en entornos web front-end.
+- **Tailwind CSS (V4)**: Motor de diseño utilitario para estructurar una interfaz limpia.
 - **Framer Motion (`motion/react`)**: Biblioteca para dotar a la plataforma de transiciones dinámicas suavizadas al filtrar elementos, abrir paneles o desplegar ventanas de diálogo modal.
 
 ### 2.2. Cartografía y Geolocalización
@@ -465,6 +503,30 @@ Si `clima.esLluvia` es verdadero:
 2. Se inyecta una bandera visual `tagClima: 'alerta'` en aquellos espectáculos cuyo atributo de `ambiente` sea `'aire_libre'`, advirtiendo al usuario de su posible suspensión debido a las lluvias.
 3. Se agrega un acceso directo para **"Filtrar Shows Bajo Techo"** que re-configura instantáneamente la interfaz para proteger al usuario de las inclemencias del tiempo.
 
+### 6.3. Buscador Inteligente por Lenguaje Natural (Gemini API & Heurística de Respaldo)
+TangoBA incorpora un avanzado buscador por lenguaje natural que simplifica drásticamente la experiencia del usuario.
+
+#### 6.3.1. Arquitectura y Consulta Asíncrona a la API de Gemini
+Cuando el usuario escribe una frase de búsqueda (por ejemplo, *"quiero un show de baile el sabado a la noche"*), la aplicación realiza una solicitud `POST` asíncrona hacia el endpoint seguro de backend `/api/gemini/search`. Este servicio está impulsado por el SDK `@google/genai` empleando el modelo de última generación **`gemini-3.5-flash`**.
+
+El backend configura instrucciones de sistema detalladas y un esquema de respuesta estricto (`responseSchema`) en formato JSON para mapear la entrada en filtros relacionales:
+- `tipo`: `'baile'` (milongas, clases), `'cantado'` (conciertos), o `'show_completo'` (cenas-show).
+- `precio`: `'gratuito'` (sin costo), `'economico'` (accesibles), o `'premium'` (cena show premium).
+- `ambiente`: `'aire_libre'` (plazas, calles, Caminito) o `'techado'` (salones, teatros).
+- `horario`: `'vespertino'` (tarde) o `'nocturno'` (noche, trasnoche).
+- `dias`: Lista de días de la semana en minúsculas (`lunes` a `domingo`).
+
+#### 6.3.2. Mapeo Temporal Inteligente y Sincronización de Calendario
+La consulta envía la fecha y hora actual del cliente (`clientDate`) para permitir que la IA deduzca dinámicamente referencias relativas del lenguaje natural, tales como *"hoy"*, *"mañana"*, *"este fin de semana"* o *"esta noche"*. 
+Al retornar los filtros interpretados:
+1. Los días detectados se mapean automáticamente a las fechas correspondientes en el mes actual del calendario interactivo del cliente.
+2. Tanto los chips de filtros manuales como el **Calendar Picker** de la interfaz se sincronizan visualmente para dar un feedback inmediato y transparente al usuario.
+
+#### 6.3.3. Sistema de Heurística de Respaldo (Modo Offline Activo)
+Para garantizar una alta disponibilidad de la plataforma y evitar fallas críticas de ejecución, el servidor incorpora un sofisticado analizador heurístico local. En caso de que la clave de API `GEMINI_API_KEY` no esté configurada:
+- El backend escanea la frase mediante expresiones regulares y búsquedas de palabras clave en español (por ejemplo, identificando *"gratis"* o *"libre"* para el precio gratuito; *"finde"* o *"fin de semana"* para activar el sábado y domingo; y *"hoy"* o *"mañana"* calculando el índice de día actual mediante ciclos `Date`).
+- Retorna un set de filtros estructurados junto con una explicación que notifica que el **Modo Offline** está activo.
+
 ---
 
 ## 7. Panel de Administración (Seguridad y Ciclo de Vida de Sesión)
@@ -662,11 +724,19 @@ const importarCarteleraBackup = (file: File) => {
 
 ## 10. Guía de Usuario y Flujos Operativos
 
+
+
+
+
+---
+
 ### 10.1. El Itinerario del Espectador
+
+
 1. **Acceso Inicial**: Al abrir la aplicación, el usuario ve el mapa centrado en Buenos Aires junto a una tarjeta con el estado climático en tiempo real.
 2. **Exploración Visual**: El espectador puede navegar libremente, hacer clic en los marcadores de colores (verde para shows gratuitos, naranja para opciones económicas, rojo para propuestas de categoría premium) y ver los resúmenes flotantes.
 3. **Búsqueda Filtrada**: Haciendo uso de la barra de filtros, el visitante puede reducir los resultados a, por ejemplo, "Espectáculos los sábados" que tengan "Ambiente techado".
-4. **Reserva Directa**: Al abrir la tarjeta detallada de un espectáculo, el sistema provee enlaces directos a WhatsApp, números telefónicos de contacto o portales de reserva directa.
+4. **Reproductor de Sonido**: Haciendo clic en el reproductor se puede oir el tango La Cumparsita como musica de fondo acompañando las diferentes busquedas.
 
 ### 10.2. Flujo de Trabajo para el Administrador
 1. **Acceso Seguro**: El gestor presiona el botón **"Admin"** de la barra superior. Se le despliega el formulario limpio de autenticación, donde ingresa sus credenciales.
@@ -676,5 +746,125 @@ const importarCarteleraBackup = (file: File) => {
 
 ---
 
-### Resumen del Sistema y Mantenimiento de Código
-TangoBA está diseñado bajo estándares modernos de desarrollo web, combinando una interfaz interactiva con un código limpio y seguro. Con su arquitectura orientada a componentes modulares y un estricto control de tipos, la plataforma simplifica la integración de nuevas funcionalidades en el futuro, como rutas guiadas de tango o sistemas integrados de compra de entradas.
+
+### 10.3   Funcionalidades detalladas
+
+###  Buscador con filtros múltiples
+
+Filtrá espectáculos combinando cualquiera de estos criterios:
+
+#### Tipo de espectáculo
+
+| Opción | Descripción |
+|---|---|
+| 💃 Solo Baile / Milonga | Pistas de baile, milongas para ir a bailar |
+| 🎤 Cantado / Concierto | Orquestas típicas, cantantes en vivo |
+| 🎭 Show Completo | Cena-show clásica con todo incluido |
+
+#### Precio
+
+| Opción | Descripción | Ejemplos |
+|---|---|---|
+| ✅ Gratuito | Sin costo | Eventos GCBA, plazas, centros culturales |
+| 💙 Económico | Accesible | Milongas populares, centros culturales barriales |
+| ⭐ Premium | Alto valor | Casas de tango con cena show para turistas |
+
+#### Ambiente
+
+| Opción | Descripción |
+|---|---|
+| ☀️ Al Aire Libre | Plazas, anfiteatros, Caminito, calles emblemáticas |
+| 🏛️ Techado / Salón | Clubs de barrio, teatros, salones |
+
+#### Horario
+
+| Opción | Descripción |
+|---|---|
+| 🌅 Vespertino | Ideal para espectáculos callejeros y clases iniciales |
+| 🌙 Nocturno / Trasnoche | El horario fuerte de las milongas porteñas |
+
+#### Calendario seleccionando fechas
+---
+
+### Búsqueda con Inteligencia Artificial
+
+Gracias a la integración con **Google Gemini AI** podés buscar escribiendo en lenguaje natural sin usar los filtros manuales.
+
+**Ejemplos de búsquedas válidas:**
+
+```
+"Quiero ver tango gratis este domingo"
+"Milonga para bailar el sábado a la noche"
+"Show con cena que no sea muy caro"
+"Algo al aire libre si hace buen tiempo"
+"Orquesta típica en vivo esta semana"
+"Tango gratuito en plaza"
+"Milonga de trasnoche en Palermo"
+```
+
+La IA interpreta el texto y aplica los filtros correctos
+mostrando además una explicación de lo que encontró.
+
+---
+
+### Integración inteligente con el clima
+
+El sistema consulta el clima de Buenos Aires en **tiempo real** y toma decisiones automáticas:
+
+| Condición | Acción del sistema |
+|---|---|
+| ☀️ Clima ideal (16°C–26°C, sin lluvia) | Destaca eventos al aire libre con **"¡Ideal para hoy!"** |
+| 🌧️ Lluvia detectada | Alerta en eventos al aire libre: **"Podría suspenderse"** |
+| 🥶 Frío extremo (menos de 6°C) | Recomienda eventos en espacios techados |
+
+El widget del clima en el encabezado muestra:
+- Temperatura actual en grados Celsius
+- Descripción del estado del tiempo
+- Porcentaje de humedad
+- Velocidad del viento en km/h
+
+---
+
+### Mapa interactivo con geolocalización
+
+- Mapa con todos los espectáculos encontrados
+- Marcadores de colores según precio del evento
+- Popup informativo al hacer clic en cada marcador
+- Mini-mapa en el detalle de cada espectáculo
+- Botón para centrar el mapa en tu ubicación actual
+- Zoom automático para mostrar todos los resultados
+- Estilo de mapa claro y legible
+
+---
+
+### Panel de análisis para KNIME
+
+Cada búsqueda realizada queda registrada automáticamente con datos del filtro usado, resultados obtenidos.
+
+Desde el panel que esta integrado al acceder con usuario y contraseña, con acceso solo para el Administrador podés:
+- Filtrar el rango de fecha de la informacion requerida
+- Identificar los filtros más utilizados en graficos dinamicos de barras horizontales
+- Contabilizar la cantidad de consultas
+- Exportar CSV para importar en KNIME
+- Obtener la URL de la API REST de Supabase
+
+---
+
+### Panel de administración protegido
+
+Sistema completo para gestionar el contenido de la app:
+- Login con email y contraseña (Supabase Auth) para uso exclusivo del administrador
+- Formulario para cargar nuevos espectáculos 
+- Lista de todos los eventos con edición y borrado
+- Toggle para activar o desactivar eventos
+- Panel de análisis para KNIME
+- Cambio de contraseña con indicador de fortaleza
+- Acceso desde cualquier dispositivo o navegador
+
+---
+###  __Readme desarrollado con IA y adaptado segun criterio personal__
+
+
+
+
+

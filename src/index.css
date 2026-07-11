@@ -20,11 +20,16 @@
 
 /* Leaflet marker customization styles */
 .custom-leaflet-marker {
-  transition: transform 0.2s ease-out;
+  /* Prevent overriding Leaflet's internal transform positioning */
 }
 .custom-leaflet-marker:hover {
-  transform: scale(1.15) !important;
   z-index: 1000 !important;
+}
+.custom-leaflet-marker > div {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.custom-leaflet-marker:hover > div {
+  transform: scale(1.2) !important;
 }
 
 /* Custom scrollbars */

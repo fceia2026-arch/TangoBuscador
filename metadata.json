@@ -1,5 +1,5 @@
 {
-  "name": "TangoBA",
+  "name": "Tango",
   "description": "Buscador de espectáculos de tango en Buenos Aires con geolocalización, clima en tiempo real y asistencia de inteligencia artificial.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
