@@ -150,39 +150,15 @@ Cada espectáculo cultural del catálogo de TangoBA responde a la siguiente estr
 | `creado_en` | `string` | Sí | Fecha de creación del registro. |
 
 ### 3.3. Estructura de Estado Climático (`ClimaState`)
-Esta interfaz guarda la información meteorológica procesada de Buenos Aires que interactúa de manera reactiva con los filtros de lluvia:
-```typescript
-export interface ClimaState {
-  temperatura: number;
-  humedad: number;
-  precipitacion: number;
-  viento: number;
-  codigo: number; // Código meteorológico de la OMM (WMO)
-  condicion: string; // Traducción amigable (ej: "Llovizna leve")
-  emoji: string; // Representación visual (ej: "🌦️")
-  esLluvia: boolean; // Flag activo para disparar alertas e itinerarios adaptativos
-  esFrio: boolean; // Temperatura menor a 15°C
-  esIdeal: boolean; // Sin lluvias, temperatura agradable entre 18°C y 26°C
-}
+Esta interfaz guarda la información meteorológica procesada de Buenos Aires que interactúa de manera reactiva con los filtros de lluvia.
+
+
 ```
 
 ### 3.4. Registro de Estadísticas de Uso (`ConsultaLog`)
-Cada vez que un usuario realiza una búsqueda en el mapa u organiza un itinerario, la aplicación genera y guarda una métrica anónima para que los administradores identifiquen los intereses y barrios con mayor demanda de tango:
-```typescript
-export interface ConsultaLog {
-  id?: string;
-  fecha?: string;
-  filtro_tipo: string | null;
-  filtro_precio: string | null;
-  filtro_ambiente: string | null;
-  filtro_horario: string | null;
-  filtro_dia: string | null;
-  resultados_count: number;
-  clima_condicion: string | null;
-  clima_temp: number | null;
-  uso_gemini: boolean;
-  session_id: string; // Token de navegador para evitar duplicidad de logs
-}
+Cada vez que un usuario realiza una búsqueda en el mapa u organiza un itinerario, la aplicación genera y guarda una métrica anónima para que los administradores identifiquen los intereses y barrios con mayor demanda de tango.
+
+
 ```
 
 ---
