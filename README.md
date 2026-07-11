@@ -16,7 +16,7 @@ Combina tres tecnologías clave para ofrecer una experiencia única e inteligent
 
 
 
-```
+
 ### ¿Para quién esta destinado?
 
 | Perfil | Beneficio |
