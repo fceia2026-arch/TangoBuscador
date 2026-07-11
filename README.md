@@ -324,12 +324,8 @@ El sistema consolida el catálogo activo de espectáculos en memoria, crea un ar
 ### 9.2. Importador con Validación Estricta de Campos
 Para restaurar información, el administrador puede cargar cualquier archivo `.json` de respaldo anterior. El lector parsea y verifica la integridad del archivo para confirmar que contiene las propiedades mínimas requeridas antes de actualizar los registros.
 
-
+---
 ## 10. Guía de Usuario y Flujos Operativos
-
-
-
-
 
 ---
 
