@@ -187,26 +187,9 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey...
 *Nota: La aplicación dispone de un modo "fallback" (Local Storage) sumamente refinado en caso de que las variables de Supabase no estén configuradas o no se pueda establecer contacto con la base de datos remota, garantizando que el sistema sea siempre utilizable.*
 
 ### 4.3. Scripts de Comando
-La ejecución y mantenimiento de la aplicación se gestiona mediante los siguientes scripts definidos en el archivo de manifiesto `package.json`:
+La ejecución y mantenimiento de la aplicación se gestiona mediante scripts definidos en el archivo de manifiesto `package.json`
 
-```bash
-# 1. Instalar dependencias del proyecto
-npm install
 
-# 2. Iniciar el servidor local de desarrollo con HMR (Hot Module Replacement)
-# Por defecto se levanta en el puerto 3000 de acuerdo a las directivas del proxy de Cloud Run
-npm run dev
-
-# 3. Validar sintaxis y detectar errores en código TypeScript (Linter de Tipos)
-npm run lint
-
-# 4. Compilar la aplicación optimizada para producción
-# Genera los archivos estáticos listos en el directorio /dist
-npm run build
-
-# 5. Previsualizar la build de producción de manera local
-npm run preview
-```
 
 ---
 
