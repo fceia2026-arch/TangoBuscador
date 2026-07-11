@@ -411,6 +411,32 @@ export const MOCK_ESPECTACULOS: Espectaculo[] = [
 // In-memory logs for offline fallback
 let localLogs: ConsultaLog[] = [];
 
+// Flag to track if we've already ran the one-time Supabase price seed
+let pricesUpdatedInSupabase = false;
+
+// Seed Supabase with random prices between $15,000 and $35,000 once
+export async function seedDatabasePricesOnce(): Promise<void> {
+  try {
+    const { data: shows, error } = await supabase.from('espectaculos').select('id, nombre, precio_valor, precio_tipo');
+    if (error) throw error;
+    
+    if (shows) {
+      console.log('Seeding Supabase database with random prices between $15,000 and $35,000...');
+      for (const show of shows) {
+        const { valor, tipo } = getDeterministicPrice(show.id);
+        
+        // Update this show in Supabase
+        await supabase.from('espectaculos')
+          .update({ precio_valor: valor, precio_tipo: tipo })
+          .eq('id', show.id);
+      }
+      console.log('Successfully updated all Supabase shows with new randomized prices!');
+    }
+  } catch (err) {
+    console.warn('Error trying to update prices in Supabase:', err);
+  }
+}
+
 // Fetch shows applying standard filters
 export async function getEspectaculos(filtros: FiltrosState): Promise<Espectaculo[]> {
   try {
@@ -430,10 +456,23 @@ export async function getEspectaculos(filtros: FiltrosState): Promise<Espectacul
     // If database is completely empty (no rows), return mock data
     if (res.length === 0 && (!filtros.tipo && !filtros.ambiente && !filtros.horario && (!filtros.dias || filtros.dias.length === 0))) {
       res = [...MOCK_ESPECTACULOS];
+      res = applyDeterministicPrices(res);
+    } else if (res.length > 0) {
+      // If we have database records and they still have the old default seeds (500 or 1200):
+      const hasOldSeeds = res.some(e => 
+        (e.nombre === 'Milonga del Indio' && e.precio_valor === 500) || 
+        (e.nombre === 'Orquesta Típica Ciudad Baile' && e.precio_valor === 1200)
+      );
+      if (hasOldSeeds && !pricesUpdatedInSupabase) {
+        pricesUpdatedInSupabase = true;
+        // Asynchronously update all rows in Supabase in background
+        seedDatabasePricesOnce().then(() => {});
+        
+        // At runtime, for this very first load, we temporarily apply deterministic prices
+        // to `res` so they see them immediately without waiting for DB roundtrips!
+        res = applyDeterministicPrices(res);
+      }
     }
-
-    // Map prices randomly/deterministically between 5.000 and 30.000, ensuring two free shows
-    res = applyDeterministicPrices(res);
 
     // In-memory price filtering
     if (filtros.precio) {
