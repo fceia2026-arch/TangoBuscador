@@ -294,7 +294,7 @@ Un error recurrente al registrar espectáculos de manera manual es el ingreso de
 
 El panel de TangoBA previene este error antes de la persistencia transformando las entradas y aplicando valores de control en caso de que los datos ingresados sean incorrectos.
 
-
+---
 ## 8. Sistema de Analíticas y Logs de Búsqueda
 
 A diferencia de las aplicaciones estáticas que no procesan la interacción del usuario, TangoBA implementa un motor de auditoría integrado que procesa los filtros aplicados por el público.
