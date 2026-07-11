@@ -159,7 +159,7 @@ Esta interfaz guarda la información meteorológica procesada de Buenos Aires qu
 Cada vez que un usuario realiza una búsqueda en el mapa u organiza un itinerario, la aplicación genera y guarda una métrica anónima para que los administradores identifiquen los intereses y barrios con mayor demanda de tango.
 
 
-```
+
 
 ---
 
