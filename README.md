@@ -235,74 +235,19 @@ Este escenario plantea dos retos principales para la estabilidad del navegador:
 
 Para superar este comportamiento problemático, se estructuró un flujo asincrónico coordinado y protegido en un efecto secundario de ciclo de vida (`useEffect`), garantizando que se limpie la memoria existente y que los valores lat/long sean estrictamente analizados antes de intentar montar el minimapa.
 
-```
 
----
-## 6. Motor de Filtrado Inteligente y Adaptabilidad Climática
+### 6. Motor de Filtrado Inteligente y Adaptabilidad Climática
 
 El valor distintivo de TangoBA es su capacidad para combinar las consultas tradicionales con eventos del mundo físico, interactuando activamente con factores climatológicos.
 
-```
-+------------------------------------------------------------+
-|  FILTRO DE ENTRADA (Tipo, Precio, Ambiente, Horario, Día)  |
-+------------------------------------------------------------+
-                             |
-                             v
-+------------------------------------------------------------+
-|  ¿HAY LLUVIA DETECTADA POR OPEN-METEO?                      |
-|  [Sí / No]                                                 |
-+------------------------------------------------------------+
-        |                                            |
-        | Sí                                         | No
-        v                                            v
-+--------------------------------------------+ +--------------------------------------------+
-|  Recomendar Espectáculos Techados          | |  Mostrar todos los shows aplicando el     |
-|  - Alerta de suspensión al aire libre      | |  criterio regular de búsqueda             |
-+--------------------------------------------+ +--------------------------------------------+
-```
 
 ### 6.1. Integración en Tiempo Real con Open-Meteo
-La aplicación realiza una consulta asíncrona a la estación meteorológica georreferenciada en Buenos Aires para estructurar un reporte climático en tiempo real:
+La aplicación realiza una consulta asíncrona a la estación meteorológica georreferenciada en Buenos Aires para estructurar un reporte climático en tiempo real.
 
-```typescript
-const fetchWeather = async () => {
-  const lat = -34.6037;
-  const lon = -58.3816;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&timezone=America%2FArgentina%2FBuenos_Aires`;
-
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    const current = data.current;
-
-    const precipitacion = current.precipitation || 0;
-    const temp = current.temperature_2m || 15;
-    const codigoClima = current.weather_code || 0;
-
-    // Determinar si hay indicios activos de precipitaciones o lloviznas
-    const esLluvia = precipitacion > 0 || [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99].includes(codigoClima);
-    
-    setClima({
-      temperatura: Math.round(temp),
-      humedad: current.relative_humidity_2m || 70,
-      precipitacion: precipitacion,
-      viento: Math.round(current.wind_speed_10m || 10),
-      codigo: codigoClima,
-      condicion: weatherDescriptions[codigoClima] || 'Despejado',
-      emoji: weatherEmojis[codigoClima] || '☀️',
-      esLluvia,
-      esFrio: temp < 15,
-      esIdeal: !esLluvia && temp >= 18 && temp <= 26
-    });
-  } catch (err) {
-    console.error('Error al consultar clima en tiempo real:', err);
-  }
-};
-```
 
 ### 6.2. Filtro Inteligente Anti-Lluvia e Itinerario Sugerido
-Si `clima.esLluvia` es verdadero:
-1. La plataforma muestra un **Banner de Alerta Climatológica** en la parte superior, recomendando a locales y turistas optar por milongas y salones techados tradicionales (como los famosos clubes de barrio porteños o confiterías).
+
+1. La plataforma muestra un **Banner de Alerta Climatológica** en la parte superior, recomendando a locales y turistas optar por milongas y salones techados tradicionales.
 2. Se inyecta una bandera visual `tagClima: 'alerta'` en aquellos espectáculos cuyo atributo de `ambiente` sea `'aire_libre'`, advirtiendo al usuario de su posible suspensión debido a las lluvias.
 3. Se agrega un acceso directo para **"Filtrar Shows Bajo Techo"** que re-configura instantáneamente la interfaz para proteger al usuario de las inclemencias del tiempo.
 
@@ -310,9 +255,7 @@ Si `clima.esLluvia` es verdadero:
 TangoBA incorpora un avanzado buscador por lenguaje natural que simplifica drásticamente la experiencia del usuario.
 
 #### 6.3.1. Arquitectura y Consulta Asíncrona a la API de Gemini
-Cuando el usuario escribe una frase de búsqueda (por ejemplo, *"quiero un show de baile el sabado a la noche"*), la aplicación realiza una solicitud `POST` asíncrona hacia el endpoint seguro de backend `/api/gemini/search`. Este servicio está impulsado por el SDK `@google/genai` empleando el modelo de última generación **`gemini-3.5-flash`**.
-
-El backend configura instrucciones de sistema detalladas y un esquema de respuesta estricto (`responseSchema`) en formato JSON para mapear la entrada en filtros relacionales:
+Cuando el usuario escribe una frase de búsqueda (por ejemplo, *"quiero un show de baile el sabado a la noche"*),el backend configura instrucciones de sistema detalladas y un esquema de respuesta estricto (`responseSchema`) en formato JSON para mapear la entrada en filtros relacionales:
 - `tipo`: `'baile'` (milongas, clases), `'cantado'` (conciertos), o `'show_completo'` (cenas-show).
 - `precio`: `'gratuito'` (sin costo), `'economico'` (accesibles), o `'premium'` (cena show premium).
 - `ambiente`: `'aire_libre'` (plazas, calles, Caminito) o `'techado'` (salones, teatros).
@@ -339,115 +282,28 @@ Para garantizar la actualización constante de la agenda de espectáculos, Tango
 ### 7.1. Resolución del Acceso Automatizado No Deseado
 Anteriormente, al acceder al panel de administración, campos de credenciales de sesión se completaban automáticamente con valores por defecto de demostración, permitiendo que cualquier persona ingresara sin autenticación efectiva.
 
-Para corregir esta vulnerabilidad, se rediseñó el ciclo de vida de los estados del login. Ahora, la aplicación **blanquea por completo** el estado de las credenciales del formulario tanto al cerrar la sesión como al iniciar un nuevo intento de acceso. De este modo, los campos de entrada quedan limpios y exigen que la persona con privilegios escriba manualmente los datos reales cada vez que acceda al panel:
+Para corregir esta vulnerabilidad, se rediseñó el ciclo de vida de los estados del login. Ahora, la aplicación **blanquea por completo** el estado de las credenciales del formulario tanto al cerrar la sesión como al iniciar un nuevo intento de acceso. De este modo, los campos de entrada quedan limpios y exigen que la persona con privilegios escriba manualmente los datos reales cada vez que acceda al panel. Se agregó tambien la visualizacion de la contraseña haciendo clic sobre el ojito y luego volviendose a ver solo asteriscos.
 
-```typescript
-// 1. Asegurar limpieza absoluta de campos al cerrar sesión
-const handleAdminLogout = async () => {
-  try {
-    await logoutAdmin();
-  } catch (err) {
-    console.warn('Error al cerrar sesión de Supabase:', err);
-  }
-  // Borrar variables en memoria del estado de login
-  setAdminEmail('');
-  setAdminPassword('');
-  setAdminLoggedIn(false);
-  triggerToast('Sesión cerrada correctamente', 'info');
-};
-
-// 2. Asegurar limpieza absoluta de campos al abrir el Modal de Autenticación
-// Vinculado al botón de acceso al panel
-const openLoginModal = () => {
-  setAdminEmail('');
-  setAdminPassword('');
-  setAdminShowLoginModal(true);
-};
-```
 
 ### 7.2. Eliminación de Contraseñas del Formulario de Inicio de Sesión
-Como medida complementaria de seguridad para evitar que las credenciales queden en memoria del cliente o se expongan en herramientas de desarrollo, el sistema remueve la contraseña del estado inmediatamente después de procesar el intento de inicio de sesión:
+Como medida complementaria de seguridad para evitar que las credenciales queden en memoria del cliente o se expongan en herramientas de desarrollo, el sistema remueve la contraseña del estado inmediatamente después de procesar el intento de inicio de sesión.
 
-```typescript
-const handleAdminLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  try {
-    const user = await loginAdmin(adminEmail, adminPassword);
-    setAdminLoggedIn(true);
-    setAdminShowLoginModal(false);
-    setAdminPassword(''); // Blanquear contraseña por seguridad
-    triggerToast('Sesión de administrador iniciada con Supabase', 'success');
-    loadAllAdminShows();
-  } catch (err: any) {
-    // Si falla Supabase, comprobar credenciales de respaldo local
-    if (adminEmail === 'admin@tangoba.com' && adminPassword === 'admin') {
-      setAdminLoggedIn(true);
-      setAdminShowLoginModal(false);
-      setAdminPassword(''); // Blanquear contraseña por seguridad
-      triggerToast('Sesión iniciada con credenciales demo (Local)', 'success');
-      loadAllAdminShows();
-    } else {
-      setAdminPassword(''); // Blanquear contraseña por seguridad en caso de error
-      triggerToast(err.message || 'Credenciales incorrectas de administrador', 'error');
-    }
-  }
-};
-```
 
 ### 7.3. Sanitización Estricta de Entradas Numéricas Geográficas (CRUD)
 Un error recurrente al registrar espectáculos de manera manual es el ingreso de coordenadas con coma decimal en lugar de punto (ej: `-34,603` en vez de `-34.603`). Este error corrompe los objetos LatLng en Leaflet, congelando el navegador con un error fatal en la consola (`Invalid LatLng object: (NaN, NaN)`).
 
-El panel de TangoBA previene este error antes de la persistencia transformando las entradas y aplicando valores de control en caso de que los datos ingresados sean incorrectos:
+El panel de TangoBA previene este error antes de la persistencia transformando las entradas y aplicando valores de control en caso de que los datos ingresados sean incorrectos.
 
-```typescript
-const cleanLat = String(formLatitud).replace(',', '.').trim();
-const cleanLng = String(formLongitud).replace(',', '.').trim();
-
-const parsedLat = cleanLat === '' ? -34.6037 : Number(cleanLat);
-const parsedLng = cleanLng === '' ? -58.3816 : Number(cleanLng);
-
-const finalLat = isNaN(parsedLat) ? -34.6037 : parsedLat;
-const finalLng = isNaN(parsedLng) ? -58.3816 : parsedLng;
-```
-
----
+-
 
 ## 8. Sistema de Analíticas y Logs de Búsqueda
 
 A diferencia de las aplicaciones estáticas que no procesan la interacción del usuario, TangoBA implementa un motor de auditoría integrado que procesa los filtros aplicados por el público.
 
 ### 8.1. Registro Silencioso de Consultas
-Cada vez que un usuario ajusta un criterio en los filtros de búsqueda, se genera una llamada asincrónica en un segundo plano (evitando retrasos de hilos en la UI principal) que envía un registro detallado hacia la tabla `consulta_logs`:
+Cada vez que un usuario ajusta un criterio en los filtros de búsqueda, se genera una llamada asincrónica en un segundo plano (evitando retrasos de hilos en la UI principal) que envía un registro detallado hacia la tabla `consulta_logs`.
 
-```typescript
-const registrarLogBusqueda = async (filtros: FiltrosState, totalResultados: number) => {
-  // Generar o recuperar UUID persistente de la sesión del visitante en LocalStorage
-  let sessionId = localStorage.getItem('tangoba_session_id');
-  if (!sessionId) {
-    sessionId = 'sess_' + Math.random().toString(36).substring(2, 11);
-    localStorage.setItem('tangoba_session_id', sessionId);
-  }
 
-  const logPayload: ConsultaLog = {
-    filtro_tipo: filtros.tipo || null,
-    filtro_precio: filtros.precio || null,
-    filtro_ambiente: filtros.ambiente || null,
-    filtro_horario: filtros.horario || null,
-    filtro_dia: filtros.dias.length > 0 ? filtros.dias.join(',') : null,
-    resultados_count: totalResultados,
-    clima_condicion: clima ? clima.condicion : null,
-    clima_temp: clima ? clima.temperatura : null,
-    uso_gemini: false,
-    session_id: sessionId
-  };
-
-  try {
-    await saveConsultaLog(logPayload);
-  } catch (e) {
-    console.warn('Fallo registro silencioso de analíticas (Modo Offline activo):', e);
-  }
-};
-```
 
 ### 8.2. Tablero de Estadísticas de Administrador
 El panel de control lee y analiza estos datos de uso históricos para presentar gráficos integrados con métricas agregadas que resumen:
@@ -462,68 +318,13 @@ El panel de control lee y analiza estos datos de uso históricos para presentar 
 En la gestión cultural de eventos dinámicos, es crucial contar con copias de respaldo de la cartelera para evitar la pérdida de información debido a migraciones de bases de datos o fallos de conexión.
 
 ### 9.1. Motor de Exportación en Formato JSON
-El sistema consolida el catálogo activo de espectáculos en memoria, crea un archivo Blob, genera una URL temporal y dispara una descarga automática en el navegador del administrador:
+El sistema consolida el catálogo activo de espectáculos en memoria, crea un archivo Blob, genera una URL temporal y dispara una descarga automática en el navegador del administrador.
 
-```typescript
-const exportarCarteleraBackup = () => {
-  try {
-    const dataStr = JSON.stringify(espectaculos, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const fecha = new Date().toISOString().split('T')[0];
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `tangoba_backup_${fecha}.json`;
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    triggerToast('Backup exportado exitosamente', 'success');
-  } catch (err) {
-    triggerToast('Error al exportar los datos', 'error');
-  }
-};
-```
+
 
 ### 9.2. Importador con Validación Estricta de Campos
-Para restaurar información, el administrador puede cargar cualquier archivo `.json` de respaldo anterior. El lector parsea y verifica la integridad del archivo para confirmar que contiene las propiedades mínimas requeridas antes de actualizar los registros:
+Para restaurar información, el administrador puede cargar cualquier archivo `.json` de respaldo anterior. El lector parsea y verifica la integridad del archivo para confirmar que contiene las propiedades mínimas requeridas antes de actualizar los registros.
 
-```typescript
-const importarCarteleraBackup = (file: File) => {
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      const json = JSON.parse(e.target?.result as string);
-      
-      if (!Array.isArray(json)) {
-        throw new Error('El archivo de respaldo debe contener una lista válida.');
-      }
-
-      // Validar propiedades esenciales de la interfaz Espectaculo
-      const validados = json.filter(item => {
-        return item.nombre && item.direccion && item.dias_semana && Array.isArray(item.dias_semana);
-      });
-
-      if (validados.length === 0) {
-        throw new Error('No se encontraron espectáculos válidos en el archivo.');
-      }
-
-      // Guardar espectáculos validados en la base de datos
-      await saveImportedShows(validados);
-      triggerToast(`Importación exitosa: ${validados.length} shows restablecidos`, 'success');
-      fetchEspectaculosList();
-    } catch (err: any) {
-      triggerToast(`Fallo la importación: ${err.message}`, 'error');
-    }
-  };
-  reader.readAsText(file);
-};
-```
-
----
 
 ## 10. Guía de Usuario y Flujos Operativos
 
