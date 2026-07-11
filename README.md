@@ -235,7 +235,9 @@ Este escenario plantea dos retos principales para la estabilidad del navegador:
 
 Para superar este comportamiento problemático, se estructuró un flujo asincrónico coordinado y protegido en un efecto secundario de ciclo de vida (`useEffect`), garantizando que se limpie la memoria existente y que los valores lat/long sean estrictamente analizados antes de intentar montar el minimapa.
 
+```
 
+---
 ## 6. Motor de Filtrado Inteligente y Adaptabilidad Climática
 
 El valor distintivo de TangoBA es su capacidad para combinar las consultas tradicionales con eventos del mundo físico, interactuando activamente con factores climatológicos.
