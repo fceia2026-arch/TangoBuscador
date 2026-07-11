@@ -153,7 +153,6 @@ Cada espectáculo cultural del catálogo de TangoBA responde a la siguiente estr
 Esta interfaz guarda la información meteorológica procesada de Buenos Aires que interactúa de manera reactiva con los filtros de lluvia.
 
 
-```
 
 ### 3.4. Registro de Estadísticas de Uso (`ConsultaLog`)
 Cada vez que un usuario realiza una búsqueda en el mapa u organiza un itinerario, la aplicación genera y guarda una métrica anónima para que los administradores identifiquen los intereses y barrios con mayor demanda de tango.
