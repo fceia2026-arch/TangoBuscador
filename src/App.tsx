@@ -583,6 +583,33 @@ export default function App() {
           markersLayerRef.current = L.layerGroup().addTo(mapInstance);
           mapContainerRef.current = mapInstance;
 
+          // Invalidate size immediately and with small delays to ensure tiles fill container
+          try {
+            mapInstance.invalidateSize();
+          } catch (e) {}
+
+          setTimeout(() => {
+            try {
+              mapInstance.invalidateSize();
+            } catch (e) {}
+          }, 200);
+
+          setTimeout(() => {
+            try {
+              mapInstance.invalidateSize();
+            } catch (e) {}
+          }, 800);
+
+          // Setup a ResizeObserver to trigger Leaflet size calculation whenever the map container resizes
+          if (typeof window !== 'undefined' && 'ResizeObserver' in window) {
+            const ro = new ResizeObserver(() => {
+              try {
+                mapInstance.invalidateSize();
+              } catch (e) {}
+            });
+            ro.observe(mapDiv);
+          }
+
           // Try gathering and displaying user geoloc
           if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(position => {
@@ -702,6 +729,7 @@ export default function App() {
         // Fit map boundary gracefully
         if (points.length > 0 && mapContainerRef.current) {
           try {
+            mapContainerRef.current.invalidateSize();
             mapContainerRef.current.flyToBounds(points, {
               padding: [50, 50],
               maxZoom: 15,
@@ -1287,7 +1315,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans w-full overflow-x-hidden">
       
       {/* Dynamic Alert Banner based on Real-Time Weather */}
       {clima && (
@@ -1312,7 +1340,7 @@ export default function App() {
       )}
 
       {/* HEADER SECTION */}
-      <header className="bg-gradient-to-r from-blue-900 to-blue-700 text-white shadow-md sticky top-0 z-30">
+      <header className="bg-gradient-to-r from-blue-900 to-blue-700 text-white shadow-md md:sticky md:top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
           
           <div className="flex items-center gap-3">
@@ -1386,9 +1414,9 @@ export default function App() {
       <main className="flex-1 max-w-7xl mx-auto px-4 py-6 w-full flex flex-col gap-6">
 
         {/* HERO SECTION WITH BANDONEON */}
-        <section id="hero-bienvenida-bandoneon" className="h-[2.8cm] min-h-[2.8cm] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm overflow-hidden flex items-center">
+        <section id="hero-bienvenida-bandoneon" className="min-h-[2.8cm] h-auto md:h-[2.8cm] bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm overflow-hidden flex items-center">
           {/* FOTO DEL BANDONEÓN (A LA IZQUIERDA) */}
-          <div id="contenedor-foto-bandoneon" className="w-[100px] sm:w-[150px] md:w-[210px] h-full relative bg-transparent shrink-0 border-r border-blue-100">
+          <div id="contenedor-foto-bandoneon" className="w-[100px] sm:w-[150px] md:w-[210px] self-stretch relative bg-transparent shrink-0 border-r border-blue-100">
             <img
               id="foto-bandoneon-hero"
               src={bandoneonImg}
@@ -1399,15 +1427,16 @@ export default function App() {
           </div>
 
           {/* TEXTO DE BIENVENIDA (A LA DERECHA) */}
-          <div className="flex-1 px-4 py-2 flex flex-col justify-center h-full space-y-1 min-w-0">
+          <div className="flex-1 px-4 py-3 md:py-2 flex flex-col justify-center min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span id="badge-bienvenida" className="text-sm md:text-base font-serif font-bold bg-blue-50 text-blue-900 px-3 py-0.5 rounded border border-blue-100 shrink-0 w-fit">
+              <span id="badge-bienvenida" className="text-xs sm:text-sm md:text-base font-serif font-bold bg-blue-50 text-blue-900 px-3 py-0.5 rounded border border-blue-100">
                 Bienvenidos al Compás de Buenos Aires
               </span>
             </div>
-            <p id="descripcion-bienvenida" className="text-xs sm:text-[13px] text-blue-700 leading-snug">
+            <p id="descripcion-bienvenida" className="text-[11px] sm:text-xs md:text-[13px] text-blue-700 leading-snug">
               Explorá la cartelera de tango adaptada al clima de la ciudad.
-              <br />
+              <span className="hidden sm:inline"><br /></span>
+              <span className="inline sm:hidden"> </span>
               Configurá los filtros manuales o utilizá el Buscador inteligente.
             </p>
           </div>
