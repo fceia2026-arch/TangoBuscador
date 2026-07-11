@@ -212,27 +212,7 @@ npm run preview
 El mapa interactivo representa el componente central sobre el cual el usuario consume la información de espectáculos. Su montaje e inicialización se realiza en el hook `useEffect` principal en `src/App.tsx`.
 
 ```
-+------------------------------------------------------------+
-|  Init Map (Id 'mapa-principal')                            |
-|  -> Instancia un mapa en la Ciudad de Buenos Aires         |
-+------------------------------------------------------------+
-                             |
-                             v
-+------------------------------------------------------------+
-|  Agregar Capas (TileLayer Carto Voyager Voyager)           |
-+------------------------------------------------------------+
-                             |
-                             v
-+------------------------------------------------------------+
-|  Crear markersLayerRef (L.layerGroup)                      |
-|  -> Evita colisiones de renderizado al limpiar filtros     |
-+------------------------------------------------------------+
-                             |
-                             v
-+------------------------------------------------------------+
-|  Geolocalización del Usuario (Navegador)                    |
-|  -> Ubica un marcador de pulso azul                        |
-+------------------------------------------------------------+
+
 ```
 
 ### 5.1. Inicialización Robusta del Mapa
