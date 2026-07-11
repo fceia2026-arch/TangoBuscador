@@ -11,6 +11,7 @@ import {
   TipoHorario 
 } from './types';
 import { TangoPlayer } from './components/TangoPlayer';
+import bandoneonImg from './assets/images/bandoneon_nuevo_1783224790253.jpg';
 import { 
   getEspectaculos, 
   registrarConsulta, 
@@ -1390,7 +1391,7 @@ export default function App() {
           <div id="contenedor-foto-bandoneon" className="w-[100px] sm:w-[150px] md:w-[210px] h-full relative bg-transparent shrink-0 border-r border-blue-100">
             <img
               id="foto-bandoneon-hero"
-              src="/src/assets/images/bandoneon_nuevo_1783224790253.jpg"
+              src={bandoneonImg}
               alt="Bandoneón Vintage Porteño"
               referrerPolicy="no-referrer"
               className="absolute inset-0 w-full h-full object-contain p-2"
