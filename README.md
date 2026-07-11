@@ -211,48 +211,11 @@ npm run preview
 
 El mapa interactivo representa el componente central sobre el cual el usuario consume la información de espectáculos. Su montaje e inicialización se realiza en el hook `useEffect` principal en `src/App.tsx`.
 
-```
-
-```
 
 ### 5.1. Inicialización Robusta del Mapa
-Para evitar errores clásicos de Leaflet como `Map container is already initialized`, el código de TangoBA emplea referencias de React (`useRef`) para encapsular de manera persistente las instancias cartográficas:
+Para evitar errores clásicos de Leaflet como `Map container is already initialized`, el código de TangoBA emplea referencias de React (`useRef`) para encapsular de manera persistente las instancias cartográficas.
+Cuando el mapa se levanta en la interfaz, se asocia al elemento del DOM identificado con el ID único `'mapa-principal'.
 
-```typescript
-const mapContainerRef = useRef<any>(null);
-const markersLayerRef = useRef<any>(null);
-const userLocationMarkerRef = useRef<any>(null);
-```
-
-Cuando el mapa se levanta en la interfaz, se asocia al elemento del DOM identificado con el ID único `'mapa-principal'`:
-
-```typescript
-const initOrUpdateMap = () => {
-  if (!mapContainerRef.current) {
-    const L = (window as any).L;
-    if (!L) return;
-
-    // Centrado geográfico por defecto en el Obelisco porteño [-34.6037, -58.3816]
-    const mapInstance = L.map('mapa-principal', {
-      center: [-34.6037, -58.3816],
-      zoom: 13,
-      zoomControl: false, // Ocultar control nativo para rediseñar un zoom de marca propio
-      scrollWheelZoom: true
-    });
-
-    // Inyección de mosaicos estéticos "Voyager" de CartoDB
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20
-    }).addTo(mapInstance);
-
-    // Inicializar la capa contenedora exclusiva para los pines de espectáculos
-    markersLayerRef.current = L.layerGroup().addTo(mapInstance);
-    mapContainerRef.current = mapInstance;
-  }
-};
-```
 
 ### 5.2. Georreferenciación y Marcadores Personalizados de Usuario
 El mapa detecta la posición real del usuario haciendo uso de las capacidades nativas del navegador mediante `navigator.geolocation.getCurrentPosition`. 
